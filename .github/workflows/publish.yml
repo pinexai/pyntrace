@@ -5,7 +5,49 @@ on:
     types: [published]
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[eval]"
+          pip install pytest ruff
+
+      - name: Lint
+        run: ruff check sentrix/
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+
+  verify-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches pyproject.toml version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(grep '^version' pyproject.toml | head -1 | sed 's/.*= *"\(.*\)"/\1/')
+          echo "Tag version: $TAG"
+          echo "Package version: $PKG"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "ERROR: Git tag v$TAG does not match pyproject.toml version $PKG"
+            exit 1
+          fi
+
   publish:
+    needs: [test, verify-version]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -20,7 +62,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install build tools
-        run: pip install hatch build
+        run: pip install build
 
       - name: Build package
         run: python -m build
