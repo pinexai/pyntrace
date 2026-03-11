@@ -30,19 +30,19 @@
 **Here's what the attack heatmap looks like:**
 
 <p align="center">
-  <img src="docs/images/heatmap.svg" alt="sentrix attack heatmap — vulnerability matrix across models and attack plugins" width="720">
+  <img src="https://raw.githubusercontent.com/pinexai/sentrix/main/docs/images/heatmap.svg" alt="sentrix attack heatmap — vulnerability matrix across models and attack plugins" width="720">
 </p>
 
 **And the web dashboard:**
 
 <p align="center">
-  <img src="docs/images/dashboard.svg" alt="sentrix web dashboard — 7-tab real-time security monitoring" width="760">
+  <img src="https://raw.githubusercontent.com/pinexai/sentrix/main/docs/images/dashboard.svg" alt="sentrix web dashboard — 7-tab real-time security monitoring" width="760">
 </p>
 
 **Red team report from the CLI:**
 
 <p align="center">
-  <img src="docs/images/red-team-report.svg" alt="sentrix red team report output" width="680">
+  <img src="https://raw.githubusercontent.com/pinexai/sentrix/main/docs/images/red-team-report.svg" alt="sentrix red team report output" width="680">
 </p>
 
 ---
