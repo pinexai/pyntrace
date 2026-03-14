@@ -1,9 +1,9 @@
-# sentrix — LLM Security Testing
+# agentra — LLM Security Testing
 
 **Red-team, fingerprint, and monitor your LLMs — pure Python, zero config.**
 
 ```bash
-pip install sentrix
+pip install agentra
 ```
 
 ---
@@ -23,7 +23,34 @@ Real-time 7-tab dashboard with attack heatmap, scan history, cost tracking, comp
 ![sentrix dashboard](images/dashboard.svg)
 
 ```bash
-sentrix serve   # → http://localhost:7234
+agentra serve   # → http://localhost:7234
+```
+
+---
+
+## v0.3.0 — MCP Security Scanner
+
+The first comprehensive security scanner for Model Context Protocol servers:
+
+| Feature | What it tests |
+|---|---|
+| `scan_mcp` | Live MCP server — path traversal, SQL injection, SSRF, prompt injection, auth bypass, tool poisoning |
+| `analyze_mcp_tools` | Static schema analysis — detect dangerous tool chains offline, zero LLM calls |
+| Attack mutations | Double attack coverage — base64, unicode homoglyphs, rot13, zero-width injection |
+| Per-plugin judge prompts | Higher accuracy judging — each attack category uses a specialized evaluation prompt |
+| Parallel attack execution | 5x faster scans — ThreadPoolExecutor with configurable concurrency |
+
+```python
+# MCP security scan
+report = agentra.scan_mcp("http://localhost:3000")
+report.summary()  # CRITICAL: path_traversal — file:///etc/passwd leaked
+
+# Static schema analysis
+report = agentra.analyze_mcp_tools([
+    {"name": "read_file", "description": "Read files"},
+    {"name": "send_email", "description": "Send email"},
+])
+report.summary()  # CRITICAL: data_exfiltration chain — read_file → send_email
 ```
 
 ---
@@ -97,7 +124,7 @@ fp.heatmap()
 ### 3. Git-aware CI security gates
 
 ```bash
-sentrix scan myapp:chatbot --git-compare main --fail-on-regression
+agentra scan myapp:chatbot --git-compare main --fail-on-regression
 ```
 
 ---
@@ -129,7 +156,7 @@ sentrix scan myapp:chatbot --git-compare main --fail-on-regression
 ## Install
 
 ```bash
-pip install sentrix              # zero required deps
-pip install sentrix[server]      # + dashboard
-pip install sentrix[full]        # everything
+pip install agentra              # zero required deps
+pip install agentra[server]      # + dashboard
+pip install agentra[full]        # everything
 ```

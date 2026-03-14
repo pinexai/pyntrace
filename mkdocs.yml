@@ -1,8 +1,8 @@
-site_name: sentrix
+site_name: agentra
 site_description: Red-team, eval, and monitor your LLMs. Security-first, Python-native.
-site_url: https://pinexai.github.io/sentrix
-repo_url: https://github.com/pinexai/sentrix
-repo_name: pinexai/sentrix
+site_url: https://pinexai.github.io/agentra
+repo_url: https://github.com/pinexai/agentra
+repo_name: pinexai/agentra
 
 theme:
   name: material
@@ -37,6 +37,7 @@ nav:
   - Guides:
     - Red Teaming: guard.md
     - Agentic Security (v0.2): agentic-security.md
+    - MCP Security (v0.3): mcp-security.md
     - Attack Heatmap: fingerprint.md
     - Auto Test Generation: auto-dataset.md
     - Evaluation: eval.md
@@ -65,6 +66,6 @@ markdown_extensions:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/pinexai/sentrix
+      link: https://github.com/pinexai/agentra
     - icon: fontawesome/brands/python
-      link: https://pypi.org/project/sentrix/
+      link: https://pypi.org/project/agentra/
