@@ -303,15 +303,18 @@ _FALLBACK_HTML = """<!DOCTYPE html>
 <head>
 <title>agentra Dashboard</title>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f0f1a; color: #e0e0ff; min-height: 100vh; }
 .header { background: linear-gradient(135deg, #4a0080, #6a00c0); padding: 16px 24px; display: flex; align-items: center; gap: 12px; }
 .header h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
 .header .badge { background: rgba(255,255,255,0.2); padding: 2px 8px; border-radius: 12px; font-size: 12px; }
-.tabs { display: flex; background: #1a1a2e; border-bottom: 1px solid #2a2a4e; padding: 0 24px; }
-.tab { padding: 12px 20px; cursor: pointer; border-bottom: 2px solid transparent; color: #8888aa; font-size: 14px; transition: all 0.2s; }
+.tabs { display: flex; background: #1a1a2e; border-bottom: 1px solid #2a2a4e; padding: 0 24px; overflow-x: auto; }
+.tab { padding: 12px 20px; cursor: pointer; border-bottom: 2px solid transparent; color: #8888aa; font-size: 14px; transition: all 0.2s; white-space: nowrap; }
 .tab.active { color: #c084fc; border-bottom-color: #c084fc; }
+.tab:hover:not(.active) { color: #c084fc; }
 .content { padding: 24px; }
 .card { background: #1a1a2e; border: 1px solid #2a2a4e; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
 .card h3 { color: #c084fc; margin-bottom: 12px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.5px; }
@@ -325,7 +328,27 @@ tr:hover td { background: #1e1e3e; }
 .badge-red { background: #3d0015; color: #ff6b9d; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
 .badge-green { background: #003d1a; color: #4ade80; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
 .badge-yellow { background: #3d2d00; color: #fbbf24; padding: 2px 8px; border-radius: 4px; font-size: 11px; }
-.empty { text-align: center; padding: 48px; color: #5555aa; }
+/* Loading */
+.loading { text-align: center; padding: 64px; color: #8888aa; }
+.spinner { width: 36px; height: 36px; border: 3px solid #2a2a4e; border-top-color: #c084fc; border-radius: 50%; animation: spin 0.75s linear infinite; margin: 0 auto 16px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spinner { animation: none; border-top-color: #c084fc; } }
+/* Error */
+.error-state { text-align: center; padding: 64px 24px; }
+.error-state .error-icon { font-size: 40px; margin-bottom: 12px; }
+.error-state .error-msg { color: #8888aa; font-size: 14px; margin-bottom: 20px; }
+.retry-btn { background: transparent; color: #c084fc; border: 1px solid #c084fc; padding: 8px 22px; border-radius: 6px; cursor: pointer; font-size: 13px; transition: all 0.2s; }
+.retry-btn:hover { background: #c084fc; color: #0f0f1a; }
+/* Empty states */
+.empty-state { text-align: center; padding: 64px 24px; }
+.empty-state .empty-icon { font-size: 44px; margin-bottom: 14px; }
+.empty-state h3 { color: #c084fc; font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+.empty-state p { color: #8888aa; font-size: 13px; margin-bottom: 24px; }
+.empty-cmd { background: #0a0a14; border: 1px solid #2a2a4e; border-radius: 6px; padding: 10px 16px; display: inline-flex; align-items: center; gap: 12px; font-family: 'Courier New', monospace; font-size: 13px; color: #c084fc; max-width: 100%; }
+.copy-btn { background: #2a2a4e; color: #8888aa; border: none; padding: 3px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; flex-shrink: 0; }
+.copy-btn:hover { color: #e0e0ff; }
+/* Chart */
+.chart-wrap { position: relative; height: 220px; margin-bottom: 4px; }
 </style>
 </head>
 <body>
@@ -344,7 +367,7 @@ tr:hover td { background: #1e1e3e; }
   <div class="tab" onclick="showTab(this,'compliance')">Compliance</div>
   <div class="tab" onclick="showTab(this,'git')">Git</div>
 </div>
-<div class="content" id="content">Loading...</div>
+<div class="content" id="content"></div>
 
 <script>
 const ENDPOINTS = {
@@ -358,106 +381,197 @@ const ENDPOINTS = {
   git:        '/api/git/history',
 };
 
+const EMPTY_STATES = {
+  security:   { icon: '\\u{1F50D}', title: 'No scans yet', desc: 'Run your first red team scan to see results here.', cmd: 'agentra scan myapp:chatbot' },
+  mcp:        { icon: '\\u{1F50C}', title: 'No MCP scans', desc: 'Scan an MCP server for security vulnerabilities.', cmd: 'agentra scan-mcp http://localhost:3000' },
+  eval:       { icon: '\\u{1F4CA}', title: 'No experiments', desc: 'Run an evaluation experiment to compare model outputs.', cmd: 'agentra eval run experiment.py' },
+  monitor:    { icon: '\\u{1F4E1}', title: 'No traces yet', desc: 'Initialize agentra to start recording production traces.', cmd: 'agentra.init()' },
+  costs:      { icon: '\\u{1F4B0}', title: 'No cost data', desc: 'Initialize agentra to start tracking API costs.', cmd: 'agentra.init()' },
+  review:     { icon: '\\u2705', title: 'Queue is empty', desc: 'All annotations are up to date. Nothing to review.', cmd: null },
+  compliance: { icon: '\\u{1F4CB}', title: 'No compliance reports', desc: 'Generate a compliance report for your framework.', cmd: 'agentra compliance generate --framework owasp' },
+  git:        { icon: '\\u{1F500}', title: 'No regression history', desc: 'Run scans across git commits to detect regressions.', cmd: null },
+};
+
+let _activeTab = 'security';
+let _activeEl = null;
+let _chart = null;
+
+function copyCmd(cmd) {
+  navigator.clipboard.writeText(cmd).catch(function() {});
+}
+
+function emptyState(name) {
+  const s = EMPTY_STATES[name] || { icon: '\\u{1F4ED}', title: 'No data yet', desc: '', cmd: null };
+  const cmdHtml = s.cmd
+    ? '<div class="empty-cmd"><code>' + s.cmd + '</code><button class="copy-btn" onclick="copyCmd(\\'' + s.cmd.replace(/\\\\/g,'\\\\\\\\').replace(/'/g,"\\\\'") + '\\')">Copy</button></div>'
+    : '';
+  return '<div class="empty-state"><div class="empty-icon">' + String.fromCodePoint(...[...s.icon].map(function(c){return c.codePointAt(0);})) + '</div><h3>' + s.title + '</h3><p>' + s.desc + '</p>' + cmdHtml + '</div>';
+}
+
 async function showTab(el, name) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(function(t) { t.classList.remove('active'); });
   el.classList.add('active');
-  const res = await fetch(ENDPOINTS[name]);
-  const data = await res.json();
-  renderTab(name, data);
+  _activeTab = name;
+  _activeEl = el;
+  const c = document.getElementById('content');
+  c.innerHTML = '<div class="loading"><div class="spinner"></div><p>Loading\u2026</p></div>';
+  if (_chart) { _chart.destroy(); _chart = null; }
+  try {
+    const res = await fetch(ENDPOINTS[name]);
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' \u2014 ' + res.statusText);
+    const data = await res.json();
+    renderTab(name, data);
+  } catch(err) {
+    c.innerHTML = '<div class="error-state"><div class="error-icon">\\u26A0\\uFE0F</div><p class="error-msg">' + err.message + '</p><button class="retry-btn" onclick="showTab(_activeEl,_activeTab)">Retry</button></div>';
+  }
 }
 
 function fmt(col, v) {
   if (v === null || v === undefined) return '-';
-  if (col === 'created_at') return new Date(v*1000).toLocaleString();
-  if (typeof v === 'number' && col.includes('rate')) return (v*100).toFixed(1)+'%';
-  if (typeof v === 'number' && col.includes('cost')) return '$'+v.toFixed(4);
-  if (typeof v === 'number' && col.includes('avg_ms')) return v.toFixed(0)+'ms';
-  if (col === 'vulnerable_count' && v > 0) return '<span class="badge-red">'+v+' vulns</span>';
+  if (col === 'created_at') return new Date(v * 1000).toLocaleString();
+  if (typeof v === 'number' && col.includes('rate')) return (v * 100).toFixed(1) + '%';
+  if (typeof v === 'number' && col.includes('cost')) return '$' + v.toFixed(4);
+  if (typeof v === 'number' && col.includes('avg_ms')) return v.toFixed(0) + 'ms';
+  if (col === 'vulnerable_count' && v > 0) return '<span class="badge-red">' + v + ' vulns</span>';
   if (col === 'status') return v === 'pass' ? '<span class="badge-green">PASS</span>' : '<span class="badge-red">FAIL</span>';
   return String(v);
 }
 
 function table(rows, cols, labels) {
-  if (!rows || !rows.length) return '<div class="empty">No data yet.</div>';
   const hdrs = labels || cols;
-  let h = '<table><tr>' + hdrs.map(c => '<th>'+c+'</th>').join('') + '</tr>';
+  let h = '<table><tr>' + hdrs.map(function(c) { return '<th>' + c + '</th>'; }).join('') + '</tr>';
   for (const row of rows) {
-    h += '<tr>' + cols.map((c,i) => '<td>'+fmt(c, row[c])+'</td>').join('') + '</tr>';
+    h += '<tr>' + cols.map(function(c) { return '<td>' + fmt(c, row[c]) + '</td>'; }).join('') + '</tr>';
   }
   return h + '</table>';
 }
 
+function barChart(id, labels, values, colors, opts) {
+  opts = opts || {};
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  const isHoriz = opts.horizontal;
+  return new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ label: opts.label || '', data: values, backgroundColor: colors, borderRadius: 4 }] },
+    options: {
+      indexAxis: isHoriz ? 'y' : 'x',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { beginAtZero: true, ticks: { color: '#8888aa', callback: opts.xFmt || undefined }, grid: { color: '#1e1e3e' } },
+        y: { beginAtZero: !isHoriz, ticks: { color: '#8888aa', callback: opts.yFmt || undefined }, grid: { color: '#1e1e3e' } }
+      }
+    }
+  });
+}
+
 function renderTab(name, data) {
   const c = document.getElementById('content');
-  const empty = '<div class="empty">No data yet.</div>';
-  if (!data || (Array.isArray(data) && !data.length)) { c.innerHTML = empty; return; }
 
   if (name === 'security') {
-    c.innerHTML = '<div class="card"><h3>Red Team Reports</h3>' +
-      table(data,
-        ['target_fn','model','total_attacks','vulnerable_count','vulnerability_rate','total_cost_usd','created_at'],
-        ['Target','Model','Attacks','Vulns','Vuln Rate','Cost','Date']
-      ) + '</div>';
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+    c.innerHTML =
+      '<div class="card"><h3>Vulnerability Rate by Target</h3><div class="chart-wrap"><canvas id="ch"></canvas></div></div>' +
+      '<div class="card"><h3>Red Team Reports</h3>' +
+      table(rows, ['target_fn','model','total_attacks','vulnerable_count','vulnerability_rate','total_cost_usd','created_at'],
+                  ['Target','Model','Attacks','Vulns','Vuln Rate','Cost','Date']) + '</div>';
+    const rates = rows.map(function(r) { return +((r.vulnerability_rate || 0) * 100).toFixed(1); });
+    _chart = barChart('ch',
+      rows.map(function(r) { return r.target_fn || 'unknown'; }),
+      rates,
+      rates.map(function(r) { return r > 15 ? '#ef4444' : r > 5 ? '#f59e0b' : '#10b981'; }),
+      { label: 'Vuln %', yFmt: function(v) { return v + '%'; } }
+    );
 
   } else if (name === 'mcp') {
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
     c.innerHTML = '<div class="card"><h3>MCP Security Scans</h3>' +
-      table(data,
-        ['endpoint','total_tests','vulnerable_count','created_at'],
-        ['Endpoint','Tests','Vulns','Date']
-      ) + '</div>';
+      table(rows, ['endpoint','total_tests','vulnerable_count','created_at'], ['Endpoint','Tests','Vulns','Date']) + '</div>';
 
   } else if (name === 'eval') {
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
     c.innerHTML = '<div class="card"><h3>Experiments</h3>' +
-      table(data,
-        ['name','fn_name','total_items','pass_rate','avg_score','total_cost_usd','created_at'],
-        ['Name','Function','Items','Pass Rate','Avg Score','Cost','Date']
-      ) + '</div>';
+      table(rows, ['name','fn_name','total_items','pass_rate','avg_score','total_cost_usd','created_at'],
+                  ['Name','Function','Items','Pass Rate','Avg Score','Cost','Date']) + '</div>';
 
   } else if (name === 'monitor') {
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
     c.innerHTML = '<div class="card"><h3>Production Traces</h3>' +
-      table(data,
-        ['name','status','total_duration_ms','total_cost_usd','created_at'],
-        ['Trace','Status','Duration','Cost','Date']
-      ) + '</div>';
+      table(rows, ['name','status','total_duration_ms','total_cost_usd','created_at'],
+                  ['Trace','Status','Duration','Cost','Date']) + '</div>';
 
   } else if (name === 'costs') {
-    c.innerHTML = '<div class="card"><h3>Cost by Model</h3>' +
-      table(data,
-        ['model','calls','total_cost','avg_ms'],
-        ['Model','Calls','Total Cost','Avg Latency']
-      ) + '</div>';
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+    c.innerHTML =
+      '<div class="card"><h3>Cost by Model</h3><div class="chart-wrap"><canvas id="ch"></canvas></div></div>' +
+      '<div class="card"><h3>Breakdown</h3>' +
+      table(rows, ['model','calls','total_cost','avg_ms'], ['Model','Calls','Total Cost','Avg Latency']) + '</div>';
+    _chart = barChart('ch',
+      rows.map(function(r) { return r.model || 'unknown'; }),
+      rows.map(function(r) { return +(r.total_cost || 0).toFixed(4); }),
+      '#7c3aed',
+      { label: 'Cost $', horizontal: true, xFmt: function(v) { return '$' + v; } }
+    );
 
   } else if (name === 'review') {
     const items = Array.isArray(data) ? data : (data.pending || []);
-    if (!items.length) { c.innerHTML = empty; return; }
+    if (!items.length) { c.innerHTML = emptyState(name); return; }
     c.innerHTML = '<div class="card"><h3>Annotation Queue</h3>' +
-      table(items,
-        ['result_id','plugin','severity','label','reviewer','created_at'],
-        ['Result ID','Plugin','Severity','Label','Reviewer','Date']
-      ) + '</div>';
+      table(items, ['result_id','plugin','severity','label','reviewer','created_at'],
+                   ['Result ID','Plugin','Severity','Label','Reviewer','Date']) + '</div>';
 
   } else if (name === 'compliance') {
     const items = Array.isArray(data) ? data : [];
-    if (!items.length) { c.innerHTML = empty; return; }
+    if (!items.length) { c.innerHTML = emptyState(name); return; }
     c.innerHTML = '<div class="card"><h3>Compliance Reports</h3>' +
-      table(items,
-        ['framework','passed_controls','total_controls','created_at'],
-        ['Framework','Passed','Total Controls','Date']
-      ) + '</div>';
+      table(items, ['framework','passed_controls','total_controls','created_at'],
+                   ['Framework','Passed','Total Controls','Date']) + '</div>';
 
   } else if (name === 'git') {
+    const rows = Array.isArray(data) ? data : [];
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
     c.innerHTML = '<div class="card"><h3>Git Regression History</h3>' +
-      table(data,
-        ['git_commit','scans','avg_vuln_rate','total_cost'],
-        ['Commit','Scans','Avg Vuln Rate','Total Cost']
-      ) + '</div>';
+      table(rows, ['git_commit','scans','avg_vuln_rate','total_cost'],
+                  ['Commit','Scans','Avg Vuln Rate','Total Cost']) + '</div>';
 
   } else {
-    c.innerHTML = '<div class="card"><h3>'+name+'</h3><pre>'+JSON.stringify(data,null,2)+'</pre></div>';
+    c.innerHTML = '<div class="card"><h3>' + name + '</h3><pre>' + JSON.stringify(data, null, 2) + '</pre></div>';
   }
 }
 
-showTab(document.querySelector('.tab.active'), 'security');
+// WebSocket — connect and auto-refresh active tab on updates
+(function() {
+  function connect() {
+    try {
+      const ws = new WebSocket('ws://' + location.host + '/ws');
+      ws.onmessage = function(e) {
+        try {
+          const msg = JSON.parse(e.data);
+          if (msg.type === 'scan_completed' || msg.type === 'refresh') {
+            showTab(_activeEl, _activeTab);
+          }
+        } catch(_) {}
+      };
+      ws.onclose = function() { setTimeout(connect, 5000); };
+      setInterval(function() { if (ws.readyState === 1) ws.send(JSON.stringify({type:'ping'})); }, 30000);
+    } catch(_) {}
+  }
+  connect();
+})();
+
+// Init
+(function() {
+  const el = document.querySelector('.tab.active');
+  _activeEl = el;
+  showTab(el, 'security');
+})();
 </script>
 </body>
 </html>"""
