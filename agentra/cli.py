@@ -303,9 +303,19 @@ def cmd_eval_run(args) -> None:
     from agentra import init
     init(persist=True)
 
-    # Load experiment file
+    import os as _os
     import runpy
-    print(f"[agentra] Running eval script: {args.file} — ensure you trust this file.")
+    path = _os.path.abspath(args.file)
+    if not getattr(args, "yes", False):
+        print(f"[agentra] WARNING: This will execute arbitrary Python code from:")
+        print(f"           {path}")
+        try:
+            confirm = input("Continue? [y/N]: ").strip().lower()
+        except EOFError:
+            confirm = ""
+        if confirm != "y":
+            print("[agentra] Aborted.")
+            sys.exit(0)
     ns = runpy.run_path(args.file)
     exp = ns.get("experiment") or ns.get("exp")
     if exp is None:
@@ -403,7 +413,13 @@ def cmd_plugin_install(args) -> None:
 
 def cmd_serve(args) -> None:
     from agentra.server.app import run
-    run(port=args.port, db_path=args.db, no_open=args.no_open)
+    run(
+        port=args.port,
+        db_path=args.db,
+        no_open=args.no_open,
+        ssl_certfile=getattr(args, "cert", None),
+        ssl_keyfile=getattr(args, "key", None),
+    )
 
 
 def cmd_history(args) -> None:
@@ -440,6 +456,46 @@ def cmd_costs(args) -> None:
         print(f"  {r['model']:<30} {r['calls']:>8} ${r['total']:>11.4f}")
         total += r["total"]
     print(f"\n  {'TOTAL':<30} {'':>8} ${total:>11.4f}")
+
+
+def cmd_secrets(args) -> None:
+    from agentra.secrets.store import (
+        load_secrets, save_secrets, delete_secret, list_secrets, get_secret,
+    )
+    subcmd = getattr(args, "secrets_command", None)
+
+    if subcmd == "set":
+        data = load_secrets()
+        data[args.key] = args.value
+        save_secrets(data)
+        print(f"[agentra] Saved {args.key}")
+
+    elif subcmd == "get":
+        val = get_secret(args.key)
+        if val is None:
+            print(f"[agentra] Key '{args.key}' not found.")
+            sys.exit(1)
+        masked = val[:3] + "***" if len(val) > 3 else "***"
+        print(f"{args.key} = {masked}")
+
+    elif subcmd == "list":
+        data = list_secrets()
+        if not data:
+            print("[agentra] No secrets stored.")
+            return
+        print(f"\n{'Key':<40} {'Value'}")
+        print("-" * 55)
+        for k, v in sorted(data.items()):
+            print(f"  {k:<38} {v}")
+
+    elif subcmd == "delete":
+        removed = delete_secret(args.key)
+        if removed:
+            print(f"[agentra] Deleted {args.key}")
+        else:
+            print(f"[agentra] Key '{args.key}' not found.")
+    else:
+        print("[agentra] Usage: agentra secrets {set|get|list|delete} ...")
 
 
 def cmd_version(args) -> None:
@@ -569,6 +625,8 @@ def main() -> None:
     p_eval_run = eval_sub.add_parser("run")
     p_eval_run.add_argument("file", help="Python file defining 'experiment' variable")
     p_eval_run.add_argument("--fail-below", type=float, dest="fail_below", metavar="RATE")
+    p_eval_run.add_argument("--yes", "-y", action="store_true",
+                            help="Skip confirmation prompt (CI/non-interactive use)")
     p_eval_run.set_defaults(func=cmd_eval_run)
 
     # monitor
@@ -649,6 +707,10 @@ def main() -> None:
     p_serve.add_argument("--port", type=int, default=7234)
     p_serve.add_argument("--db", metavar="PATH")
     p_serve.add_argument("--no-open", action="store_true", dest="no_open")
+    p_serve.add_argument("--cert", metavar="FILE", default=None,
+                         help="TLS certificate PEM file — enables HTTPS")
+    p_serve.add_argument("--key", metavar="FILE", default=None,
+                         help="TLS private key PEM file (required with --cert)")
     p_serve.set_defaults(func=cmd_serve)
 
     # history / costs / version
@@ -659,6 +721,26 @@ def main() -> None:
     p_costs = sub.add_parser("costs", help="Show LLM costs")
     p_costs.add_argument("--days", type=int, default=7)
     p_costs.set_defaults(func=cmd_costs)
+
+    # secrets
+    p_sec = sub.add_parser("secrets", help="Manage local encrypted secrets store")
+    sec_sub = p_sec.add_subparsers(dest="secrets_command")
+
+    p_sec_set = sec_sub.add_parser("set", help="Save a secret key=value")
+    p_sec_set.add_argument("key", help="Secret key name (e.g. OPENAI_API_KEY)")
+    p_sec_set.add_argument("value", help="Secret value")
+    p_sec_set.set_defaults(func=cmd_secrets)
+
+    p_sec_get = sec_sub.add_parser("get", help="Read a secret (masked)")
+    p_sec_get.add_argument("key")
+    p_sec_get.set_defaults(func=cmd_secrets)
+
+    p_sec_list = sec_sub.add_parser("list", help="List all stored secret keys")
+    p_sec_list.set_defaults(func=cmd_secrets)
+
+    p_sec_del = sec_sub.add_parser("delete", help="Remove a secret")
+    p_sec_del.add_argument("key")
+    p_sec_del.set_defaults(func=cmd_secrets)
 
     sub.add_parser("version").set_defaults(func=cmd_version)
 

@@ -1,6 +1,7 @@
 """Shared SQLite persistence layer for agentra."""
 from __future__ import annotations
 
+import os
 import sqlite3
 from pathlib import Path
 
@@ -24,6 +25,24 @@ def set_db_path(path: str | None) -> None:
 def get_conn(db_path: str | None = None) -> sqlite3.Connection:
     p = get_db_path(db_path)
     p.parent.mkdir(parents=True, exist_ok=True)
+    key = os.environ.get("AGENTRA_DB_KEY")
+    if key:
+        try:
+            import sqlcipher3.dbapi2 as _sc  # type: ignore[import]
+
+            conn = _sc.connect(str(p))
+            conn.execute(f"PRAGMA key='{key}'")
+            conn.row_factory = _sc.Row
+            conn.execute("PRAGMA journal_mode=WAL")
+            return conn  # type: ignore[return-value]
+        except ImportError:
+            import warnings
+
+            warnings.warn(
+                "[agentra] AGENTRA_DB_KEY set but sqlcipher3 not installed. "
+                "Database is NOT encrypted. "
+                "Run: pip install sqlcipher3  (requires libsqlcipher)"
+            )
     conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -47,6 +66,58 @@ def _q(sql: str, params: tuple = (), db_path: str | None = None) -> list:
         return [dict(r) for r in rows]
     finally:
         conn.close()
+
+
+def log_audit(
+    event: str,
+    *,
+    ip: str = "",
+    user_id: str = "",
+    resource_type: str = "",
+    resource_id: str = "",
+    status: str = "success",
+    details: dict | None = None,
+    db_path: str | None = None,
+) -> None:
+    """Write one row to audit_log and a JSON line to the rotating audit log file.
+
+    Never raises — failures are silently swallowed so the caller is never blocked.
+    """
+    import json as _json
+    import time as _time
+
+    try:
+        _q(
+            "INSERT INTO audit_log(timestamp,event,user_id,ip_address,"
+            "resource_type,resource_id,status,details) VALUES(?,?,?,?,?,?,?,?)",
+            (
+                _time.time(),
+                event,
+                user_id,
+                ip,
+                resource_type,
+                resource_id,
+                status,
+                _json.dumps(details or {}),
+            ),
+            db_path=db_path,
+        )
+    except Exception:
+        pass
+
+    try:
+        from agentra.monitor.audit_log import write_audit_event
+
+        write_audit_event(
+            event,
+            user_id=user_id,
+            ip=ip,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            status=status,
+        )
+    except Exception:
+        pass
 
 
 _SCHEMA = """
@@ -340,4 +411,19 @@ CREATE TABLE IF NOT EXISTS conversation_scan_reports (
     results_json TEXT,
     created_at REAL
 );
+
+-- v0.5.0: Security audit log
+CREATE TABLE IF NOT EXISTS audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp REAL NOT NULL,
+    event TEXT NOT NULL,
+    user_id TEXT DEFAULT '',
+    ip_address TEXT DEFAULT '',
+    resource_type TEXT DEFAULT '',
+    resource_id TEXT DEFAULT '',
+    status TEXT DEFAULT 'success',
+    details TEXT DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
+CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event);
 """

@@ -123,6 +123,13 @@ def init(
     """
     from agentra import providers, db
 
+    # Load local secrets file (no-op if ~/.agentra/secrets.json doesn't exist)
+    try:
+        from agentra.secrets.store import load_secrets
+        load_secrets()
+    except Exception:
+        pass
+
     # Configure providers
     providers.configure(
         offline=offline,

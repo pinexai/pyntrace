@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 try:
-    from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+    from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
     from fastapi.responses import HTMLResponse, JSONResponse
     from fastapi.staticfiles import StaticFiles
     _HAS_FASTAPI = True
@@ -34,9 +34,59 @@ def create_app(db_path: str | None = None) -> "FastAPI":
             response.headers["X-Content-Type-Options"] = "nosniff"
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["X-XSS-Protection"] = "1; mode=block"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; "
+                "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+                "style-src 'self' 'unsafe-inline'; "
+                "connect-src 'self' ws: wss:; "
+                "img-src 'self' data:;"
+            )
+            response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+            response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
             return response
 
     app.add_middleware(_SecurityHeaders)
+
+    # Auth + rate-limit middleware — protects all /api/* routes
+    from agentra.server.auth import require_auth, require_admin, check_rate_limit
+
+    class _AuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            path = request.url.path
+            if path.startswith("/api/"):
+                from fastapi.responses import JSONResponse as _J
+                # Auth check
+                try:
+                    require_auth(request)
+                except Exception as exc:
+                    status = getattr(exc, "status_code", 401)
+                    headers = getattr(exc, "headers", {"WWW-Authenticate": 'Basic realm="agentra"'})
+                    return _J({"detail": "Unauthorized"}, status_code=status, headers=headers)
+                # Rate limit (200 req/min per IP)
+                try:
+                    check_rate_limit(request.client.host or "unknown")
+                except Exception:
+                    return _J({"detail": "Too many requests"}, status_code=429)
+            return await call_next(request)
+
+    app.add_middleware(_AuthMiddleware)
+
+    # CORS — default: localhost only; override with AGENTRA_CORS_ORIGINS
+    from fastapi.middleware.cors import CORSMiddleware
+    _allowed_origins = [
+        o.strip()
+        for o in os.getenv(
+            "AGENTRA_CORS_ORIGINS", "http://localhost:7234,http://localhost:7235"
+        ).split(",")
+        if o.strip()
+    ]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_allowed_origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "DELETE"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
     # Serve static files
     if STATIC_DIR.exists():
@@ -328,10 +378,111 @@ def create_app(db_path: str | None = None) -> "FastAPI":
             media_type="text/plain; version=0.0.4; charset=utf-8",
         )
 
+    # --- OAuth routes (v0.5.0) ---
+    _oauth_states: set[str] = set()
+
+    @app.get("/auth/login", include_in_schema=False)
+    async def oauth_login():
+        from agentra.server.oauth import get_login_url
+        import secrets as _sec
+        state = _sec.token_urlsafe(16)
+        _oauth_states.add(state)
+        url = get_login_url(state)
+        if not url:
+            return HTMLResponse(
+                "<h1>OAuth not configured</h1>"
+                "<p>Set AGENTRA_OAUTH_PROVIDER, AGENTRA_OAUTH_CLIENT_ID, "
+                "AGENTRA_OAUTH_CLIENT_SECRET to enable OAuth login.</p>"
+            )
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url)
+
+    @app.get("/auth/callback", include_in_schema=False)
+    async def oauth_callback(code: str = "", state: str = ""):
+        from agentra.server.oauth import exchange_code
+        from agentra.server.auth import make_session_cookie
+        from fastapi.responses import RedirectResponse, HTMLResponse as _H
+        if state not in _oauth_states:
+            return _H("<h1>Invalid or expired OAuth state</h1>", status_code=400)
+        _oauth_states.discard(state)
+        username = exchange_code(code)
+        if not username:
+            return _H("<h1>OAuth authentication failed</h1>", status_code=401)
+        resp = RedirectResponse("/")
+        resp.set_cookie(
+            "agentra_session",
+            make_session_cookie(username),
+            httponly=True,
+            samesite="lax",
+        )
+        return resp
+
+    @app.get("/auth/logout", include_in_schema=False)
+    async def oauth_logout():
+        from fastapi.responses import RedirectResponse
+        resp = RedirectResponse("/")
+        resp.delete_cookie("agentra_session")
+        return resp
+
+    # --- GDPR endpoints (v0.5.0) ---
+    from agentra.db import log_audit
+
+    @app.get("/api/user/{user_id}/data")
+    async def export_user_data(user_id: str, request: Request):
+        """GDPR Art. 20 — data portability export."""
+        check_rate_limit(request.client.host or "unknown", max_requests=10, window_s=60)
+        data = {
+            "user_id": user_id,
+            "traces": _q(
+                "SELECT id, name, start_time, end_time, output, error FROM traces WHERE user_id=?",
+                (user_id,), db_path,
+            ),
+            "annotations": _q(
+                "SELECT * FROM review_annotations WHERE reviewer=?",
+                (user_id,), db_path,
+            ),
+        }
+        log_audit(
+            "data_export",
+            ip=request.client.host or "",
+            user_id=user_id,
+            resource_type="user_data",
+            resource_id=user_id,
+        )
+        return JSONResponse(data)
+
+    @app.delete("/api/user/{user_id}/data", status_code=204)
+    async def delete_user_data(user_id: str, request: Request):
+        """GDPR Art. 17 — right to erasure (admin only)."""
+        # Extra auth: require admin role
+        try:
+            require_admin(request)
+        except Exception as exc:
+            from fastapi.responses import JSONResponse as _J
+            return _J({"detail": str(exc)}, status_code=getattr(exc, "status_code", 403))
+        check_rate_limit(request.client.host or "unknown", max_requests=5, window_s=60)
+        _q("DELETE FROM spans WHERE trace_id IN (SELECT id FROM traces WHERE user_id=?)",
+           (user_id,), db_path)
+        _q("DELETE FROM traces WHERE user_id=?", (user_id,), db_path)
+        _q("DELETE FROM review_annotations WHERE reviewer=?", (user_id,), db_path)
+        log_audit(
+            "data_delete",
+            ip=request.client.host or "",
+            user_id=user_id,
+            resource_type="user_data",
+            resource_id=user_id,
+        )
+
     return app
 
 
-def run(port: int = 7234, db_path: str | None = None, no_open: bool = False) -> None:
+def run(
+    port: int = 7234,
+    db_path: str | None = None,
+    no_open: bool = False,
+    ssl_certfile: str | None = None,
+    ssl_keyfile: str | None = None,
+) -> None:
     """Start the agentra dashboard server."""
     try:
         import uvicorn
@@ -339,17 +490,30 @@ def run(port: int = 7234, db_path: str | None = None, no_open: bool = False) -> 
         raise ImportError("pip install agentra[server]")
 
     app = create_app(db_path)
+    scheme = "https" if ssl_certfile else "http"
 
     if not no_open:
         import threading
+
         def _open_browser():
-            import time, webbrowser
+            import time
+            import webbrowser
             time.sleep(1.5)
-            webbrowser.open(f"http://localhost:{port}")
+            webbrowser.open(f"{scheme}://localhost:{port}")
+
         threading.Thread(target=_open_browser, daemon=True).start()
 
-    print(f"[agentra] Dashboard running at http://localhost:{port}")
-    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning")
+    print(f"[agentra] Dashboard running at {scheme}://localhost:{port}")
+    if ssl_certfile:
+        print(f"[agentra] TLS enabled: {ssl_certfile}")
+
+    ssl_kwargs: dict = {}
+    if ssl_certfile:
+        ssl_kwargs["ssl_certfile"] = ssl_certfile
+    if ssl_keyfile:
+        ssl_kwargs["ssl_keyfile"] = ssl_keyfile
+
+    uvicorn.run(app, host="0.0.0.0", port=port, log_level="warning", **ssl_kwargs)
 
 
 _FALLBACK_HTML = """<!DOCTYPE html>

@@ -367,7 +367,12 @@ class RedTeamReport:
     def _persist(self) -> None:
         try:
             from agentra.db import get_conn
+            from agentra.guard.pii_mask import mask_pii
             conn = get_conn()
+            results_data = self.to_json()["results"]
+            for r in results_data:
+                r["attack_input"] = mask_pii(r.get("attack_input", ""))
+                r["output"] = mask_pii(r.get("output", ""))
             with conn:
                 conn.execute(
                     """INSERT OR REPLACE INTO red_team_reports
@@ -376,7 +381,7 @@ class RedTeamReport:
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (self.id, self.target_fn, self.model, self.git_commit,
                      self.total_attacks, self.vulnerable_count, self.vulnerability_rate,
-                     self.total_cost_usd, json.dumps(self.to_json()["results"]), self.created_at),
+                     self.total_cost_usd, json.dumps(results_data), self.created_at),
                 )
             conn.close()
         except Exception as e:

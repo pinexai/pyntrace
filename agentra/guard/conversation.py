@@ -197,7 +197,12 @@ class ConversationScanReport:
     def _persist(self, db_path: str | None = None) -> None:
         try:
             from agentra.db import get_conn
+            from agentra.guard.pii_mask import mask_pii
             conn = get_conn(db_path)
+            results_data = [r.to_dict() for r in self.results]
+            for r in results_data:
+                r["attack_payload"] = mask_pii(r.get("attack_payload", ""))
+                r["response"] = mask_pii(r.get("response", ""))
             with conn:
                 conn.execute(
                     """INSERT OR REPLACE INTO conversation_scan_reports
@@ -207,7 +212,7 @@ class ConversationScanReport:
                     (
                         self.id, self.fn_name, self.total_turns,
                         self.vulnerable_count, self.vulnerability_rate,
-                        json.dumps([r.to_dict() for r in self.results]),
+                        json.dumps(results_data),
                         self.created_at,
                     ),
                 )
