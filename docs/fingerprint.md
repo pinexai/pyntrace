@@ -2,14 +2,14 @@
 
 ## Overview
 
-`sentrix.guard.fingerprint()` runs the full attack suite against multiple models simultaneously, producing a vulnerability matrix showing exactly which attacks break which models.
+`agentra.guard.fingerprint()` runs the full attack suite against multiple models simultaneously, producing a vulnerability matrix showing exactly which attacks break which models.
 
 ## Usage
 
 ```python
-import sentrix
+import agentra
 
-fp = sentrix.guard.fingerprint({
+fp = agentra.guard.fingerprint({
     "gpt-4o-mini": gpt_fn,
     "claude-haiku": claude_fn,
     "llama-3": llama_fn,

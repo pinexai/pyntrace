@@ -2,24 +2,24 @@
 
 ## Overview
 
-`sentrix.auto_dataset()` reads your function's signature, docstring, and type hints, then uses an LLM to generate N test cases automatically.
+`agentra.auto_dataset()` reads your function's signature, docstring, and type hints, then uses an LLM to generate N test cases automatically.
 
 No manual test writing. No CSV files.
 
 ## Usage
 
 ```python
-import sentrix
+import agentra
 
 def my_chatbot(message: str) -> str:
     """Answer user questions helpfully and safely. Refuse harmful requests."""
     return call_llm(message)
 
 # Generate 50 adversarial test cases
-ds = sentrix.auto_dataset(my_chatbot, n=50, focus="adversarial")
+ds = agentra.auto_dataset(my_chatbot, n=50, focus="adversarial")
 
 # Generate mixed test cases
-ds = sentrix.auto_dataset(my_chatbot, n=20, focus="mixed")
+ds = agentra.auto_dataset(my_chatbot, n=20, focus="mixed")
 
 print(f"Generated {len(ds)} test cases")
 ```
@@ -36,13 +36,13 @@ print(f"Generated {len(ds)} test cases")
 ## Use with experiments
 
 ```python
-ds = sentrix.auto_dataset(my_chatbot, n=30, focus="adversarial")
+ds = agentra.auto_dataset(my_chatbot, n=30, focus="adversarial")
 
-exp = sentrix.experiment(
+exp = agentra.experiment(
     "security-eval",
     dataset=ds,
     fn=my_chatbot,
-    scorers=[sentrix.scorers.no_pii],
+    scorers=[agentra.scorers.no_pii],
 )
 exp.run().summary()
 ```
