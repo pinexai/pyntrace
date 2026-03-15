@@ -25,7 +25,7 @@ jobs:
           pip install pytest ruff
 
       - name: Lint
-        run: ruff check sentrix/
+        run: ruff check agentra/
 
       - name: Run tests
         run: pytest tests/ -v --tb=short
