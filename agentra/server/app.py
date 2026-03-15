@@ -840,14 +840,14 @@ function copyCmd(cmd) {
 }
 
 function escCmd(cmd) {
-  return cmd.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  return String(cmd).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function emptyState(name) {
   const s = EMPTY_STATES[name] || { ei: '📭', title: 'No data yet', desc: '', cmd: null };
   const cmdHtml = s.cmd
     ? '<div class="empty-cmd"><code>' + escH(s.cmd) + '</code>'
-      + '<button class="copy-btn" onclick="copyCmd(\'' + escCmd(s.cmd) + '\')">Copy</button></div>'
+      + '<button class="copy-btn" onclick="copyCmd(\\\'' + escCmd(s.cmd) + '\\')">Copy</button></div>'
     : '';
   return '<div class="empty-state"><div class="ei">' + s.ei + '</div>'
     + '<h3>' + escH(s.title) + '</h3><p>' + escH(s.desc) + '</p>' + cmdHtml + '</div>';
@@ -892,8 +892,7 @@ function buildTable(rows, cols, labels, onRowClick) {
   let h = '<div class="table-wrap"><table id="mainTable"><thead><tr>';
   hdrs.forEach(function(label, i) {
     const col = cols[i];
-    h += '<th onclick="sortBy(\'' + col + '\')" aria-sort="none" data-col="' + col + '">\'
-      + escH(label) + '<span class="sort-icon"></span></th>';
+    h += '<th onclick="sortBy(\\\'' + col + '\\')" aria-sort="none" data-col="' + col + '">' + escH(label) + '<span class="sort-icon"></span></th>';
   });
   h += '</tr></thead><tbody id="mainTbody">';
   h += rowsHtml(rows, cols, onRowClick);
@@ -1288,7 +1287,7 @@ function runSearchModal(q) {
     return;
   }
   wrap.innerHTML = results.map(function(r) {
-    return '<div class="search-result-item" onclick="jumpTo(\'' + escH(r.tab) + '\')">'
+    return '<div class="search-result-item" onclick="jumpTo(\\\'' + escH(r.tab) + '\\')">'
       + '<span class="sri-label">' + escH(r.label.slice(0,60)) + '</span>'
       + '<span class="sri-meta">' + escH(r.meta) + '</span></div>';
   }).join('');
