@@ -37,8 +37,11 @@
 **And the web dashboard:**
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/pinexai/agentra/main/docs/images/dashboard.svg" alt="agentra web dashboard — 7-tab real-time security monitoring" width="760">
-  <br><em>Terminal output rendered as SVG for illustration</em>
+  <img src="https://raw.githubusercontent.com/pinexai/agentra/main/docs/images/dashboard-overview.png" alt="agentra web dashboard — Security tab, vulnerability rate bar chart and scan table" width="760">
+</p>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/pinexai/agentra/main/docs/images/dashboard-costs.png" alt="agentra web dashboard — Costs tab, cost by model bar chart and breakdown table" width="760">
 </p>
 
 **Red team report from the CLI:**
@@ -212,7 +215,7 @@ agentra scan myapp:chatbot --plugins all --n 50 --max-cost 5.00
 
 ### 1. Auto-generate adversarial test cases
 
-No manual test writing. sentrix reads your function's signature and docstring, calls an LLM, and generates N test cases covering jailbreaks, PII extraction, injection attacks, and normal usage.
+No manual test writing. agentra reads your function's signature and docstring, calls an LLM, and generates N test cases covering jailbreaks, PII extraction, injection attacks, and normal usage.
 
 ```python
 def my_chatbot(message: str) -> str:
@@ -334,9 +337,9 @@ report.summary()
 
 ---
 
-## Why sentrix over promptfoo?
+## Why agentra over promptfoo?
 
-| | **sentrix** | promptfoo |
+| | **agentra** | promptfoo |
 |---|---|---|
 | Language | **Python** (pip install) | TypeScript (npm install) |
 | Configuration | **Zero config** | YAML required |
@@ -398,7 +401,7 @@ agentra fingerprint myapp:gpt_fn myapp:claude_fn                     # attack he
 agentra auto-dataset myapp:chatbot --n 50 --focus adversarial
 
 # Evaluation
-sentrix eval run experiment.py --fail-below 0.8
+agentra eval run experiment.py --fail-below 0.8
 
 # Security for agents & RAG
 agentra scan-agent myapp:my_agent

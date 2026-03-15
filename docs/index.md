@@ -20,7 +20,7 @@ Run the full attack suite against multiple models simultaneously. Get a vulnerab
 
 Real-time 7-tab dashboard with attack heatmap, scan history, cost tracking, compliance status, and trace explorer.
 
-![sentrix dashboard](images/dashboard.svg)
+![agentra dashboard](images/dashboard-overview.png)
 
 ```bash
 agentra serve   # → http://localhost:7234
@@ -68,19 +68,19 @@ Four features for the new agentic AI attack surface — no competitor has covera
 
 ```python
 # Multi-agent swarm exploitation
-report = sentrix.scan_swarm({"planner": fn1, "coder": fn2}, topology="chain")
+report = agentra.scan_swarm({"planner": fn1, "coder": fn2}, topology="chain")
 report.propagation_graph()
 
 # Tool chain privilege escalation
-report = sentrix.scan_toolchain(agent_fn, tools=[read_db, summarize, send_email])
+report = agentra.scan_toolchain(agent_fn, tools=[read_db, summarize, send_email])
 report.summary()  # HIGH: data_exfiltration chain detected
 
 # System prompt leakage
-report = sentrix.prompt_leakage_score(chatbot_fn, system_prompt="...")
+report = agentra.prompt_leakage_score(chatbot_fn, system_prompt="...")
 # overall_leakage_score: 0.12
 
 # Cross-language bypass matrix
-report = sentrix.scan_multilingual(chatbot_fn, languages=["en", "zh", "ar", "sw"])
+report = agentra.scan_multilingual(chatbot_fn, languages=["en", "zh", "ar", "sw"])
 report.heatmap()  # colored terminal matrix
 ```
 
@@ -108,13 +108,13 @@ def my_chatbot(message: str) -> str:
     """Answer user questions helpfully and safely."""
     ...
 
-ds = sentrix.auto_dataset(my_chatbot, n=50, focus="adversarial")
+ds = agentra.auto_dataset(my_chatbot, n=50, focus="adversarial")
 ```
 
 ### 2. Attack heatmap across models
 
 ```python
-fp = sentrix.guard.fingerprint({
+fp = agentra.guard.fingerprint({
     "gpt-4o-mini": gpt_fn,
     "claude-haiku": claude_fn,
 })
@@ -131,7 +131,7 @@ agentra scan myapp:chatbot --git-compare main --fail-on-regression
 
 ## vs promptfoo
 
-| Feature | sentrix | promptfoo |
+| Feature | agentra | promptfoo |
 |---|---|---|
 | Language | **Python** | TypeScript |
 | Config | **Zero** | YAML |
