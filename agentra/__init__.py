@@ -18,7 +18,7 @@ Quick start:
 """
 from __future__ import annotations
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 __author__ = "agentra"
 
 # Guard (primary — security)
@@ -31,6 +31,7 @@ from agentra.guard.prompt_leakage import prompt_leakage_score, LeakageReport
 from agentra.guard.multilingual import scan_multilingual, MultilingualReport
 from agentra.guard.mcp_scanner import scan_mcp, MCPScanReport
 from agentra.guard.mcp_static import analyze_mcp_tools, ToolRiskReport
+from agentra.guard.conversation import scan_conversation, ConversationScanReport
 
 # Eval
 from agentra.eval.dataset import Dataset, DatasetItem
@@ -41,6 +42,9 @@ from agentra.eval.compare import compare_models, prompt_ab_test
 # Monitor
 from agentra.monitor.tracer import trace, span
 from agentra.monitor.drift import DriftDetector, DriftReport
+from agentra.monitor.alerts import AlertManager, AlertRule
+from agentra.monitor.prometheus import PrometheusExporter, expose_metrics
+from agentra.monitor.latency import benchmark_latency, LatencyReport
 
 # Sub-packages
 from agentra import guard, eval, monitor
@@ -68,6 +72,8 @@ __all__ = [
     "MCPScanReport",
     "analyze_mcp_tools",
     "ToolRiskReport",
+    "scan_conversation",
+    "ConversationScanReport",
     "guard",
     # Eval
     "Dataset",
@@ -83,6 +89,12 @@ __all__ = [
     "span",
     "DriftDetector",
     "DriftReport",
+    "AlertManager",
+    "AlertRule",
+    "PrometheusExporter",
+    "expose_metrics",
+    "benchmark_latency",
+    "LatencyReport",
     "monitor",
 ]
 

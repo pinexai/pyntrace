@@ -313,4 +313,31 @@ CREATE TABLE IF NOT EXISTS mcp_scan_reports (
     results_json TEXT,
     created_at REAL
 );
+
+-- v0.4.0: Latency profiling
+CREATE TABLE IF NOT EXISTS latency_reports (
+    id TEXT PRIMARY KEY,
+    fn_name TEXT,
+    n_prompts INTEGER,
+    n_runs INTEGER,
+    p50_ms REAL,
+    p95_ms REAL,
+    p99_ms REAL,
+    mean_ms REAL,
+    min_ms REAL,
+    max_ms REAL,
+    results_json TEXT,
+    created_at REAL
+);
+
+-- v0.4.0: Multi-turn conversation scanning
+CREATE TABLE IF NOT EXISTS conversation_scan_reports (
+    id TEXT PRIMARY KEY,
+    fn_name TEXT,
+    total_turns INTEGER,
+    vulnerable_count INTEGER,
+    vulnerability_rate REAL,
+    results_json TEXT,
+    created_at REAL
+);
 """

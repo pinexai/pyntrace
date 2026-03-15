@@ -274,6 +274,60 @@ def create_app(db_path: str | None = None) -> "FastAPI":
             del row["results_json"]
         return JSONResponse(row)
 
+    # API: Latency tab (v0.4.0)
+    @app.get("/api/latency")
+    async def get_latency_reports(limit: int = 20):
+        limit = _clamp_limit(limit)
+        rows = _q(
+            "SELECT id, fn_name, n_prompts, n_runs, p50_ms, p95_ms, p99_ms, mean_ms, min_ms, max_ms, created_at FROM latency_reports ORDER BY created_at DESC LIMIT ?",
+            (limit,), db_path
+        )
+        return JSONResponse(rows)
+
+    @app.get("/api/latency/{report_id}")
+    async def get_latency_report(report_id: str):
+        rows = _q("SELECT * FROM latency_reports WHERE id = ?", (report_id,), db_path)
+        if not rows:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        row = rows[0]
+        if row.get("results_json"):
+            row["per_prompt"] = json.loads(row["results_json"])
+            del row["results_json"]
+        return JSONResponse(row)
+
+    # API: Conversation scans tab (v0.4.0)
+    @app.get("/api/conversation-scans")
+    async def get_conversation_scans(limit: int = 20):
+        limit = _clamp_limit(limit)
+        rows = _q(
+            "SELECT id, fn_name, total_turns, vulnerable_count, vulnerability_rate, created_at FROM conversation_scan_reports ORDER BY created_at DESC LIMIT ?",
+            (limit,), db_path
+        )
+        return JSONResponse(rows)
+
+    @app.get("/api/conversation-scans/{scan_id}")
+    async def get_conversation_scan(scan_id: str):
+        rows = _q("SELECT * FROM conversation_scan_reports WHERE id = ?", (scan_id,), db_path)
+        if not rows:
+            return JSONResponse({"error": "Not found"}, status_code=404)
+        row = rows[0]
+        if row.get("results_json"):
+            row["results"] = json.loads(row["results_json"])
+            del row["results_json"]
+        return JSONResponse(row)
+
+    # Prometheus metrics endpoint (v0.4.0)
+    from fastapi import Response as _FResponse
+
+    @app.get("/metrics", include_in_schema=False)
+    async def prometheus_metrics():
+        from agentra.monitor.prometheus import PrometheusExporter
+        exp = PrometheusExporter(db_path=db_path)
+        return _FResponse(
+            content=exp.get_metrics_text(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
+
     return app
 
 

@@ -10,6 +10,7 @@ from agentra.guard.multilingual import scan_multilingual, MultilingualReport
 from agentra.guard.mcp_scanner import scan_mcp, MCPScanReport
 from agentra.guard.mcp_static import analyze_mcp_tools, ToolRiskReport
 from agentra.guard.mutations import get_mutated_attacks, mutate_attack
+from agentra.guard.conversation import scan_conversation, ConversationScanReport
 
 __all__ = [
     "red_team",
@@ -32,4 +33,6 @@ __all__ = [
     "ToolRiskReport",
     "get_mutated_attacks",
     "mutate_attack",
+    "scan_conversation",
+    "ConversationScanReport",
 ]

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentra"
-version = "0.3.0"
+version = "0.4.0"
 description = "Red-team, eval, and monitor your LLMs. Security-first, Python-native."
 readme = "README.md"
 requires-python = ">=3.10"

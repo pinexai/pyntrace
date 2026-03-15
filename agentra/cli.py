@@ -28,7 +28,16 @@ def cmd_scan(args) -> None:
     init(persist=True)
 
     fn = _load_fn(args.target)
-    plugins = [p.strip() for p in args.plugins.split(",")] if args.plugins else ["jailbreak", "pii", "harmful"]
+
+    # --fast: quick CI mode (5 attacks, jailbreak+harmful only)
+    if getattr(args, "fast", False):
+        plugins = ["jailbreak", "harmful"]
+        args.n = 5
+    # --critical-only: only high-severity plugins
+    elif getattr(args, "critical_only", False):
+        plugins = ["jailbreak", "harmful"]
+    else:
+        plugins = [p.strip() for p in args.plugins.split(",")] if args.plugins else ["jailbreak", "pii", "harmful"]
 
     report = red_team(
         fn,
@@ -50,6 +59,51 @@ def cmd_scan(args) -> None:
 
     if args.output_junit:
         report.save_junit(args.output_junit)
+
+
+def cmd_benchmark(args) -> None:
+    """agentra benchmark module:fn --prompts prompts.txt [--n-runs 3]"""
+    from agentra import init
+    from agentra.monitor.latency import benchmark_latency
+    init(persist=True)
+
+    fn = _load_fn(args.target)
+
+    if args.prompts:
+        with open(args.prompts) as f:
+            prompts = [line.strip() for line in f if line.strip()]
+    else:
+        prompts = [
+            "Hello, how are you?",
+            "What is the capital of France?",
+            "Explain quantum computing in one sentence.",
+            "Write a haiku about the ocean.",
+            "What is 2 + 2?",
+        ]
+
+    report = benchmark_latency(fn, prompts=prompts, n_runs=args.n_runs, warmup=args.warmup)
+    report.summary()
+
+    if args.output:
+        with open(args.output, "w") as f:
+            json.dump(report.to_json(), f, indent=2)
+        print(f"[agentra] Latency report saved to {args.output}")
+
+
+def cmd_scan_conversation(args) -> None:
+    """agentra scan-conversation module:fn [--n 20]"""
+    from agentra import init
+    from agentra.guard.conversation import scan_conversation
+    init(persist=True)
+
+    fn = _load_fn(args.target)
+    report = scan_conversation(fn, n=args.n)
+    report.summary()
+
+    if args.output:
+        with open(args.output, "w") as f:
+            json.dump(report.to_json(), f, indent=2)
+        print(f"[agentra] Report saved to {args.output}")
 
 
 def cmd_fingerprint(args) -> None:
@@ -414,6 +468,10 @@ def main() -> None:
                         help="Save SARIF 2.1.0 report (GitHub Advanced Security)")
     p_scan.add_argument("--output-junit", dest="output_junit", metavar="FILE",
                         help="Save JUnit XML report (CI test reporters)")
+    p_scan.add_argument("--fast", action="store_true",
+                        help="Quick CI mode: n=5, jailbreak+harmful only (<1 min)")
+    p_scan.add_argument("--critical-only", action="store_true", dest="critical_only",
+                        help="Only high-severity plugins (jailbreak, harmful)")
     p_scan.set_defaults(func=cmd_scan)
 
     # fingerprint
@@ -566,6 +624,25 @@ def main() -> None:
     p_install = plug_sub.add_parser("install")
     p_install.add_argument("name")
     p_install.set_defaults(func=cmd_plugin_install)
+
+    # benchmark
+    p_bench = sub.add_parser("benchmark", help="Latency profiling (p50/p95/p99)")
+    p_bench.add_argument("target", help="module:function")
+    p_bench.add_argument("--prompts", metavar="FILE", help="Text file with one prompt per line")
+    p_bench.add_argument("--n-runs", dest="n_runs", type=int, default=3, metavar="N",
+                         help="Timed runs per prompt (default 3)")
+    p_bench.add_argument("--warmup", type=int, default=1, metavar="N",
+                         help="Discarded warm-up runs per prompt (default 1)")
+    p_bench.add_argument("--output", metavar="FILE", help="Save JSON report to file")
+    p_bench.set_defaults(func=cmd_benchmark)
+
+    # scan-conversation
+    p_conv = sub.add_parser("scan-conversation", help="Multi-turn conversation attack scanner")
+    p_conv.add_argument("target", help="module:function (must accept list[dict])")
+    p_conv.add_argument("--n", type=int, default=20, metavar="N",
+                        help="Number of multi-turn attacks to run (default 20)")
+    p_conv.add_argument("--output", metavar="FILE", help="Save JSON report to file")
+    p_conv.set_defaults(func=cmd_scan_conversation)
 
     # serve
     p_serve = sub.add_parser("serve", help="Start dashboard")
