@@ -18,9 +18,12 @@ Run the full attack suite against multiple models simultaneously. Get a vulnerab
 
 ## Dashboard
 
-Real-time 7-tab dashboard with attack heatmap, scan history, cost tracking, compliance status, and trace explorer.
+Real-time 9-tab dashboard — security health score, scan comparison, span waterfall, latency box plot, cost tracking, compliance, and more.
 
-![pyntrace dashboard](images/dashboard-overview.png)
+<video width="100%" controls muted loop playsinline style="border-radius:10px;border:1px solid rgba(0,0,0,0.12);display:block">
+  <source src="demo.mp4" type="video/mp4">
+  <a href="demo.mp4"><img src="images/dashboard-security.png" alt="pyntrace dashboard demo — click to play"></a>
+</video>
 
 ```bash
 pyntrace serve   # → http://localhost:7234

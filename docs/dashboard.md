@@ -24,6 +24,15 @@ make build-ui     # production build → static/app/
 make dev-ui       # http://localhost:5173
 ```
 
+## Demo
+
+<video width="100%" controls muted loop playsinline style="border-radius:10px;border:1px solid rgba(0,0,0,0.12);display:block">
+  <source src="../demo.mp4" type="video/mp4">
+  <a href="../demo.mp4"><img src="images/dashboard-security.png" alt="pyntrace dashboard walkthrough — click to play"></a>
+</video>
+
+*2.5-minute narrated walkthrough — security health score, scan comparison, span waterfall, latency, costs, compliance, and git regression.*
+
 ## Screenshots
 
 ### Security tab — health score, vulnerability trend, and attack radar

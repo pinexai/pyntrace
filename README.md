@@ -34,10 +34,23 @@
   <br><em>Terminal output rendered as SVG for illustration</em>
 </p>
 
+**Live demo — 2.5 minute walkthrough:**
+
+<p align="center">
+  <video width="760" controls muted loop playsinline
+         src="https://raw.githubusercontent.com/pinexai/pyntrace/main/docs/demo.mp4">
+    <a href="https://raw.githubusercontent.com/pinexai/pyntrace/main/docs/demo.mp4">
+      <img src="https://raw.githubusercontent.com/pinexai/pyntrace/main/docs/images/dashboard-security.png"
+           alt="pyntrace dashboard demo — click to play" width="760">
+    </a>
+  </video>
+  <br><em>▶ Security health score · Scan comparison · Span waterfall · Latency box plot · Cost charts</em>
+</p>
+
 **And the web dashboard:**
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/pinexai/pyntrace/main/docs/images/dashboard-overview.png" alt="pyntrace web dashboard — Security tab, vulnerability rate bar chart and scan table" width="760">
+  <img src="https://raw.githubusercontent.com/pinexai/pyntrace/main/docs/images/dashboard-overview.png" alt="pyntrace web dashboard — Security tab with health score, vulnerability trend and attack radar" width="760">
 </p>
 
 <p align="center">
