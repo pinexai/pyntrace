@@ -163,6 +163,9 @@ class AlertManager:
         }
 
     def _send(self, url: str, payload: dict) -> None:
+        from urllib.parse import urlparse as _urlparse
+        if _urlparse(url).scheme not in ("http", "https"):
+            raise ValueError(f"Unsupported webhook URL scheme: {_urlparse(url).scheme!r}")
         body = json.dumps(payload).encode()
         req = urllib.request.Request(
             url,
@@ -170,5 +173,5 @@ class AlertManager:
             headers={"Content-Type": "application/json", "User-Agent": "pyntrace/0.4.0"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=self._timeout):
+        with urllib.request.urlopen(req, timeout=self._timeout):  # nosec B310
             pass

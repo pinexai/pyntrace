@@ -225,6 +225,9 @@ class DriftDetector:
 
     def _send_alert(self, msg: str, report: DriftReport) -> None:
         import urllib.request
+        from urllib.parse import urlparse as _urlparse
+        if _urlparse(self.alert_webhook).scheme not in ("http", "https"):
+            raise ValueError(f"Unsupported alert webhook URL scheme: {_urlparse(self.alert_webhook).scheme!r}")
         try:
             payload = json.dumps({
                 "text": msg,
@@ -235,7 +238,7 @@ class DriftDetector:
                 data=payload,
                 headers={"Content-Type": "application/json"},
             )
-            urllib.request.urlopen(req, timeout=5)
+            urllib.request.urlopen(req, timeout=5)  # nosec B310
         except Exception as e:
             print(f"[pyntrace] Alert webhook failed: {e}")
 

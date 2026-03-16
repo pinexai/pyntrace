@@ -119,6 +119,7 @@ def _call_ollama(model: str, messages: list[dict], system: str) -> tuple[str, in
     import json
     import urllib.request
     import urllib.error
+    from urllib.parse import urlparse as _urlparse
 
     payload = {
         "model": model,
@@ -128,13 +129,16 @@ def _call_ollama(model: str, messages: list[dict], system: str) -> tuple[str, in
     if system:
         payload["messages"] = [{"role": "system", "content": system}] + messages
 
+    _ollama_url = "http://localhost:11434/api/chat"
+    if _urlparse(_ollama_url).scheme not in ("http", "https"):
+        raise ValueError(f"Unsupported provider URL scheme: {_urlparse(_ollama_url).scheme!r}")
     try:
         req = urllib.request.Request(
-            "http://localhost:11434/api/chat",
+            _ollama_url,
             data=json.dumps(payload).encode(),
             headers={"Content-Type": "application/json"},
         )
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # nosec B310
             data = json.loads(resp.read())
             text = data.get("message", {}).get("content", "")
             return text, 0, 0

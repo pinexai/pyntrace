@@ -103,6 +103,9 @@ def _handle_regression(
 
 def _send_webhook(url: str, msg: str, report) -> None:
     import urllib.request
+    from urllib.parse import urlparse as _urlparse
+    if _urlparse(url).scheme not in ("http", "https"):
+        raise ValueError(f"Unsupported webhook URL scheme: {_urlparse(url).scheme!r}")
     try:
         payload = json.dumps({
             "text": msg,
@@ -111,7 +114,7 @@ def _send_webhook(url: str, msg: str, report) -> None:
             "by_plugin": report.by_plugin,
         }).encode()
         req = urllib.request.Request(url, data=payload, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=5)
+        urllib.request.urlopen(req, timeout=5)  # nosec B310
     except Exception as e:
         print(f"[pyntrace] Webhook failed: {e}")
 

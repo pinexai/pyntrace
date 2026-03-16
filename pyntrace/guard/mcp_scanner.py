@@ -424,8 +424,12 @@ def _send_jsonrpc(
         headers["Authorization"] = f"Bearer {auth_token}"
 
     try:
+        from urllib.parse import urlparse as _urlparse
+        _p = _urlparse(endpoint)
+        if _p.scheme not in ("http", "https"):
+            raise ValueError(f"Unsupported URL scheme: {_p.scheme!r}")
         req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
             return resp.read().decode(errors="replace"), resp.status
     except urllib.error.HTTPError as e:
         try:

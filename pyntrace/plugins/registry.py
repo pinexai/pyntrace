@@ -45,7 +45,10 @@ _KNOWN_PLUGINS = [
 def list_available() -> list[dict]:
     """Fetch available plugins from the community registry."""
     try:
-        with urllib.request.urlopen(_REGISTRY_URL, timeout=5) as resp:
+        from urllib.parse import urlparse as _urlparse
+        if _urlparse(_REGISTRY_URL).scheme not in ("http", "https"):
+            return _KNOWN_PLUGINS
+        with urllib.request.urlopen(_REGISTRY_URL, timeout=5) as resp:  # nosec B310
             return json.loads(resp.read())
     except Exception:
         return _KNOWN_PLUGINS

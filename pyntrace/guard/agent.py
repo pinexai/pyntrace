@@ -200,6 +200,10 @@ def _probe_mcp(endpoint: str) -> list[dict]:
     """Send adversarial MCP messages to probe server security."""
     import urllib.request
     import urllib.error
+    from urllib.parse import urlparse as _urlparse
+    _p = _urlparse(endpoint)
+    if _p.scheme not in ("http", "https"):
+        raise ValueError(f"Unsupported URL scheme for MCP endpoint: {_p.scheme!r}")
 
     issues = []
     adversarial_payloads = [
@@ -217,7 +221,7 @@ def _probe_mcp(endpoint: str) -> list[dict]:
                 headers={"Content-Type": "application/json"},
                 method="POST",
             )
-            with urllib.request.urlopen(req, timeout=5) as resp:
+            with urllib.request.urlopen(req, timeout=5) as resp:  # nosec B310
                 data = _json.loads(resp.read())
                 # Check if server returned unexpected success or leaked data
                 if "result" in data and "error" not in data:

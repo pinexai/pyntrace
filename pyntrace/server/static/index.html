@@ -1,0 +1,1139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>pyntrace Dashboard</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<header class="app-header">
+  <a class="app-logo" href="/" aria-label="pyntrace home">
+    <div class="app-logo-icon" aria-hidden="true">P</div>
+    <span>pyntrace</span>
+  </a>
+  <div class="app-badge" id="versionBadge">v…</div>
+  <div class="header-spacer"></div>
+  <div class="header-search">
+    <span class="header-search-icon" aria-hidden="true">⌕</span>
+    <input class="header-search-input" id="searchBar" placeholder="Filter current tab…"
+           oninput="filterTable(this.value)" autocomplete="off" aria-label="Filter table">
+    <span class="header-search-hint" aria-hidden="true">⌘K</span>
+  </div>
+  <div class="header-actions">
+    <div class="header-status" id="wsStatus" role="img" title="WebSocket: connecting…" aria-label="Connection status: connecting"></div>
+    <button class="header-btn" onclick="window.print()" aria-label="Export as PDF" title="Export as PDF">
+      <span aria-hidden="true">⬇</span> Export
+    </button>
+  </div>
+</header>
+
+<!-- ═══ SIDEBAR ═══ -->
+<aside class="app-sidebar" aria-label="Navigation">
+  <div role="tablist" aria-orientation="vertical" aria-label="Dashboard sections">
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Security</div>
+      <button class="sidebar-tab active" role="tab" data-tab="security" onclick="showTab(this,'security')" aria-selected="true" aria-current="page">
+        <span class="sidebar-icon" aria-hidden="true">🔍</span>
+        <span class="sidebar-label">Security</span>
+        <span class="sidebar-count" id="cnt-security">—</span>
+      </button>
+      <button class="sidebar-tab" role="tab" data-tab="mcp" onclick="showTab(this,'mcp')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">🔌</span>
+        <span class="sidebar-label">MCP Scans</span>
+        <span class="sidebar-count" id="cnt-mcp">—</span>
+      </button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Analysis</div>
+      <button class="sidebar-tab" role="tab" data-tab="eval" onclick="showTab(this,'eval')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">📊</span>
+        <span class="sidebar-label">Eval</span>
+        <span class="sidebar-count" id="cnt-eval">—</span>
+      </button>
+      <button class="sidebar-tab" role="tab" data-tab="monitor" onclick="showTab(this,'monitor')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">📡</span>
+        <span class="sidebar-label">Monitor</span>
+        <span class="sidebar-count" id="cnt-monitor">—</span>
+      </button>
+      <button class="sidebar-tab" role="tab" data-tab="latency" onclick="showTab(this,'latency')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">⚡</span>
+        <span class="sidebar-label">Latency</span>
+        <span class="sidebar-count" id="cnt-latency">—</span>
+      </button>
+      <button class="sidebar-tab" role="tab" data-tab="costs" onclick="showTab(this,'costs')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">💰</span>
+        <span class="sidebar-label">Costs</span>
+        <span class="sidebar-count" id="cnt-costs">—</span>
+      </button>
+      <button class="sidebar-tab" role="tab" data-tab="git" onclick="showTab(this,'git')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">🔀</span>
+        <span class="sidebar-label">Git</span>
+        <span class="sidebar-count" id="cnt-git">—</span>
+      </button>
+    </div>
+    <div class="sidebar-divider"></div>
+    <div class="sidebar-section">
+      <div class="sidebar-section-label">Governance</div>
+      <button class="sidebar-tab" role="tab" data-tab="review" onclick="showTab(this,'review')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">✅</span>
+        <span class="sidebar-label">Review</span>
+        <span class="sidebar-count" id="cnt-review">—</span>
+      </button>
+      <button class="sidebar-tab" role="tab" data-tab="compliance" onclick="showTab(this,'compliance')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">📋</span>
+        <span class="sidebar-label">Compliance</span>
+        <span class="sidebar-count" id="cnt-compliance">—</span>
+      </button>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══ MAIN ═══ -->
+<main class="app-main" id="appMain">
+  <div class="main-header" id="mainHeader">
+    <div class="breadcrumb">
+      pyntrace <span>›</span> <span id="breadcrumbTab">Security</span>
+    </div>
+    <div class="main-actions" id="mainActions"></div>
+  </div>
+  <div class="main-content" id="mainContent" role="tabpanel" aria-live="polite" aria-label="Tab content">
+    <!-- content rendered here -->
+  </div>
+</main>
+
+<!-- ═══ OVERLAY ═══ -->
+<div class="overlay" id="overlay" onclick="closeDetail()"></div>
+
+<!-- ═══ DETAIL PANEL ═══ -->
+<div class="detail-panel" id="detailPanel" role="dialog" aria-modal="true" aria-label="Item detail">
+  <div class="detail-header">
+    <span class="detail-title" id="detailTitle">Detail</span>
+    <button class="detail-close" onclick="closeDetail()" aria-label="Close detail panel">✕</button>
+  </div>
+  <div class="detail-body" id="detailBody"></div>
+</div>
+
+<!-- ═══ TOAST CONTAINER ═══ -->
+<div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="true"></div>
+
+<!-- ═══ SEARCH MODAL (Cmd+K) ═══ -->
+<div class="search-modal-backdrop" id="searchBackdrop" onclick="closeSearch(event)">
+  <div class="search-modal" role="dialog" aria-label="Global search" onclick="event.stopPropagation()">
+    <div class="search-modal-input">
+      <span style="color:var(--c-t3);font-size:14px" aria-hidden="true">⌕</span>
+      <input id="searchModalInput" placeholder="Search scans, functions, models…"
+             oninput="runSearch(this.value)" autocomplete="off" aria-label="Global search input">
+      <span style="font-size:10px;color:var(--c-t3)" aria-hidden="true">ESC</span>
+    </div>
+    <div class="search-modal-results" id="searchModalResults"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+/* ════════════════════════════════════════════════════
+   CONFIG
+════════════════════════════════════════════════════ */
+const ENDPOINTS = {
+  security:   '/api/security/reports',
+  mcp:        '/api/mcp-scans',
+  eval:       '/api/eval/experiments',
+  monitor:    '/api/monitor/traces',
+  latency:    '/api/latency/endpoints',
+  costs:      '/api/costs/summary',
+  review:     '/api/review/pending',
+  compliance: '/api/compliance/reports',
+  git:        '/api/git/history',
+};
+
+const TAB_META = {
+  security:   { label: 'Security',    icon: '🔍' },
+  mcp:        { label: 'MCP Scans',   icon: '🔌' },
+  eval:       { label: 'Eval',        icon: '📊' },
+  monitor:    { label: 'Monitor',     icon: '📡' },
+  latency:    { label: 'Latency',     icon: '⚡' },
+  costs:      { label: 'Costs',       icon: '💰' },
+  review:     { label: 'Review',      icon: '✅' },
+  compliance: { label: 'Compliance',  icon: '📋' },
+  git:        { label: 'Git',         icon: '🔀' },
+};
+
+const EMPTY_STATES = {
+  security:   { icon: '🔍', title: 'No security scans yet',      desc: 'Run your first red-team scan to see vulnerability results here.',      cmd: 'pyntrace scan myapp:chatbot',                  est: '~2 min' },
+  mcp:        { icon: '🔌', title: 'No MCP scans yet',           desc: 'Scan an MCP server endpoint for security vulnerabilities.',             cmd: 'pyntrace scan-mcp http://localhost:3000',      est: '~1 min' },
+  eval:       { icon: '📊', title: 'No experiments yet',         desc: 'Run an evaluation experiment to compare model outputs across prompts.', cmd: 'pyntrace eval run experiment.py',              est: '~5 min' },
+  monitor:    { icon: '📡', title: 'No traces recorded',         desc: 'Initialize pyntrace in your app to start recording production traces.', cmd: 'import pyntrace; pyntrace.init()',             est: null    },
+  latency:    { icon: '⚡', title: 'No latency data yet',        desc: 'Instrument your LLM endpoints to capture p50/p95/p99 latency profiles.',  cmd: 'import pyntrace; pyntrace.init()',             est: null    },
+  costs:      { icon: '💰', title: 'No cost data yet',           desc: 'Initialize pyntrace to start tracking LLM API costs in real time.',     cmd: 'import pyntrace; pyntrace.init()',             est: null    },
+  review:     { icon: '✅', title: 'Review queue is empty',      desc: 'All annotations are up to date. Nothing needs attention right now.',    cmd: null,                                           est: null    },
+  compliance: { icon: '📋', title: 'No compliance reports',      desc: 'Generate a compliance report for your security framework.',            cmd: 'pyntrace compliance --framework owasp_llm_top10', est: null },
+  git:        { icon: '🔀', title: 'No regression history',      desc: 'Run scans across multiple git commits to detect regressions.',          cmd: null,                                           est: null    },
+};
+
+/* ════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════ */
+let _tab   = 'security';
+let _tabEl = null;
+let _charts = [];
+let _sortState  = { col: null, dir: 1 };
+let _tableData  = [];
+let _tableRowFn = null;
+let _allData    = {};
+
+/* ════════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════════ */
+function esc(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function fmt(col, v) {
+  if (v == null) return '<span style="color:var(--c-t3)">—</span>';
+  const s = String(v);
+  if (col === 'created_at' || col === 'start_time') return esc(new Date(v * 1000).toLocaleString());
+  if (col.includes('rate') && typeof v === 'number') {
+    const pct = (v * 100).toFixed(1);
+    const cls = v > .15 ? 'badge-critical' : v > .05 ? 'badge-medium' : 'badge-low';
+    return '<span class="badge ' + cls + '">' + pct + '%</span>';
+  }
+  if (col.includes('cost') && typeof v === 'number') return '$' + v.toFixed(4);
+  if (col.includes('_ms') && typeof v === 'number')  return v.toFixed(0) + ' ms';
+  if (col === 'vulnerable_count' && typeof v === 'number') {
+    if (v === 0)  return '<span class="badge badge-low">0 vulns</span>';
+    if (v <= 2)   return '<span class="badge badge-medium">' + v + ' vulns</span>';
+    return '<span class="badge badge-critical">' + v + ' vulns</span>';
+  }
+  if (col === 'status' || col === 'overall_status') {
+    const ok = v === 'pass' || v === 'PASS' || v === 'compliant';
+    return ok
+      ? '<span class="badge badge-low">✓ ' + esc(v) + '</span>'
+      : '<span class="badge badge-critical">✗ ' + esc(v) + '</span>';
+  }
+  if (col === 'error') {
+    return v ? '<span class="badge badge-critical">Error</span>' : '<span class="badge badge-low">OK</span>';
+  }
+  return esc(s.length > 64 ? s.slice(0,61) + '…' : s);
+}
+
+function skeleton() {
+  return '<div class="card">'
+    + '<div class="skeleton skeleton-line wide" style="margin-bottom:16px;height:16px"></div>'
+    + '<div class="skeleton-row">'
+    + '<div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div>'
+    + '<div class="skeleton skeleton-cell"></div><div class="skeleton skeleton-cell"></div>'
+    + '</div>'.repeat(5)
+    + '<div class="skeleton skeleton-line medium"></div>'
+    + '</div>';
+}
+
+function emptyState(name) {
+  const s = EMPTY_STATES[name] || { icon: '📭', title: 'No data yet', desc: '', cmd: null, est: null };
+  let cmdHtml = '';
+  if (s.cmd) {
+    const safeCmd = s.cmd.replace(/'/g,"&#39;");
+    cmdHtml = '<div class="empty-cmd">'
+      + '<span class="mono">' + esc(s.cmd) + '</span>'
+      + '<button class="copy-btn" onclick="copyText(\'' + safeCmd + '\')">Copy</button>'
+      + '</div>';
+  }
+  const linksHtml = s.est
+    ? '<div class="empty-links">'
+        + '<span class="empty-link" aria-hidden="true">⚡ ' + esc(s.est) + '</span>'
+        + '<a class="empty-link" href="https://github.com/pinexai/pyntrace" target="_blank" rel="noopener">Docs</a>'
+        + '</div>'
+    : '';
+  return '<div class="empty-state">'
+    + '<div class="empty-icon" aria-hidden="true">' + s.icon + '</div>'
+    + '<div class="empty-title">' + esc(s.title) + '</div>'
+    + '<div class="empty-desc">' + esc(s.desc) + '</div>'
+    + cmdHtml + linksHtml
+    + '</div>';
+}
+
+function copyText(txt) {
+  navigator.clipboard.writeText(txt)
+    .then(function() { toast('Copied!', 'success'); })
+    .catch(function() { toast('Copy failed', 'error'); });
+}
+
+/* ════════════════════════════════════════════════════
+   TOAST
+════════════════════════════════════════════════════ */
+function toast(msg, type) {
+  type = type || 'info';
+  const icons = { success: '✓', error: '✗', info: 'ⓘ', warning: '⚠' };
+  const d = document.createElement('div');
+  d.className = 'toast ' + type;
+  d.innerHTML = '<span class="toast-icon">' + (icons[type] || 'ⓘ') + '</span><span>' + esc(msg) + '</span>';
+  const c = document.getElementById('toastContainer');
+  c.appendChild(d);
+  setTimeout(function() {
+    d.classList.add('fade-out');
+    setTimeout(function() { d.remove(); }, 220);
+  }, 3200);
+}
+
+/* ════════════════════════════════════════════════════
+   TABLES
+════════════════════════════════════════════════════ */
+function buildTable(rows, cols, labels, onRowClick) {
+  _tableData = rows.slice();
+  _tableRowFn = onRowClick || null;
+  const hdrs = labels || cols;
+  let h = '<div class="table-wrap" tabindex="0" role="region" aria-label="Data table"><table id="mainTable"><thead><tr>';
+  hdrs.forEach(function(lbl, i) {
+    const col = cols[i];
+    h += '<th onclick="sortBy(\'' + col + '\')" data-col="' + col + '">' + esc(lbl) + '</th>';
+  });
+  h += '</tr></thead><tbody id="mainTbody">' + _rowsHtml(rows, cols, onRowClick) + '</tbody></table></div>';
+  return h;
+}
+
+function _rowsHtml(rows, cols, onRowClick) {
+  if (!rows.length) {
+    return '<tr><td colspan="' + cols.length + '" style="text-align:center;color:var(--c-t3);padding:28px">No results match your filter</td></tr>';
+  }
+  return rows.map(function(row, i) {
+    const cb = onRowClick ? ' onclick="rowClick(' + i + ')" title="Click for details"' : '';
+    return '<tr' + cb + '>' + cols.map(function(c) { return '<td>' + fmt(c, row[c]) + '</td>'; }).join('') + '</tr>';
+  }).join('');
+}
+
+function sortBy(col) {
+  if (_sortState.col === col) { _sortState.dir *= -1; } else { _sortState.col = col; _sortState.dir = 1; }
+  const d = _sortState.dir;
+  _tableData.sort(function(a, b) {
+    const av = a[col], bv = b[col];
+    if (av == null) return 1;
+    if (bv == null) return -1;
+    if (typeof av === 'number') return (av - bv) * d;
+    return String(av).localeCompare(String(bv)) * d;
+  });
+  document.querySelectorAll('#mainTable th').forEach(function(th) {
+    th.classList.remove('sort-asc','sort-desc');
+    if (th.dataset.col === col) th.classList.add(d === 1 ? 'sort-asc' : 'sort-desc');
+  });
+  const tbody = document.getElementById('mainTbody');
+  if (!tbody) return;
+  const cols = Array.from(document.querySelectorAll('#mainTable th')).map(function(th) { return th.dataset.col; });
+  tbody.innerHTML = _rowsHtml(_tableData, cols, _tableRowFn);
+}
+
+function filterTable(q) {
+  q = q.toLowerCase().trim();
+  const tbody = document.getElementById('mainTbody');
+  if (!tbody) return;
+  Array.from(tbody.querySelectorAll('tr')).forEach(function(r) {
+    r.style.display = (!q || r.textContent.toLowerCase().includes(q)) ? '' : 'none';
+  });
+}
+
+/* ════════════════════════════════════════════════════
+   DETAIL PANEL
+════════════════════════════════════════════════════ */
+function openDetail(title, bodyHtml) {
+  document.getElementById('detailTitle').textContent = title;
+  document.getElementById('detailBody').innerHTML = bodyHtml;
+  document.getElementById('detailPanel').classList.add('open');
+  document.getElementById('overlay').classList.add('open');
+}
+
+function closeDetail() {
+  document.getElementById('detailPanel').classList.remove('open');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+function rowClick(i) {
+  const row = _tableData[i];
+  if (!row) return;
+  const title = row.target_fn || row.fn_name || row.name || row.endpoint || ('Item #' + i);
+  let body = '<div class="detail-section"><div class="detail-section-title">Details</div><div class="detail-kv">';
+  Object.entries(row).forEach(function(kv) {
+    const k = kv[0], v = kv[1];
+    if (k === 'results_json' || k === 'results') return;
+    const lbl = k.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); });
+    body += '<span class="detail-k">' + esc(lbl) + '</span><span class="detail-v">' + fmt(k, v) + '</span>';
+  });
+  body += '</div></div>';
+  if (row.results && Array.isArray(row.results) && row.results.length) {
+    const vulns  = row.results.filter(function(r) { return r.vulnerable; });
+    const passed = row.results.filter(function(r) { return !r.vulnerable; });
+    body += '<div class="detail-section"><div class="detail-section-title">Results — ' + row.results.length + ' total</div>';
+    if (vulns.length) {
+      body += '<div style="font-size:11px;color:var(--c-t3);margin-bottom:6px">⚠ ' + vulns.length + ' vulnerable</div>';
+      vulns.slice(0, 8).forEach(function(r) {
+        body += '<div class="detail-result">'
+          + '<div class="detail-result-plugin">' + esc(r.plugin || r.template_name || 'attack')
+          + (r.severity ? ' · <span style="color:var(--c-warn)">' + esc(r.severity) + '</span>' : '') + '</div>'
+          + '<div class="detail-result-text">' + esc((r.attack_input || r.attack_payload || '').slice(0,140)) + '</div>'
+          + (r.judge_reasoning ? '<div style="font-size:10px;color:var(--c-t3);margin-top:4px">' + esc(r.judge_reasoning.slice(0,100)) + '</div>' : '')
+          + '</div>';
+      });
+      if (vulns.length > 8) body += '<div style="font-size:11px;color:var(--c-t3);padding:4px">…and ' + (vulns.length-8) + ' more</div>';
+    }
+    if (passed.length) {
+      body += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:11px;color:var(--c-t3);padding:6px 0">✓ ' + passed.length + ' passed (expand)</summary><div style="margin-top:4px">';
+      passed.slice(0, 6).forEach(function(r) {
+        body += '<div style="font-size:11px;color:var(--c-t3);padding:3px 0">' + esc((r.plugin||'') + ' — ' + (r.attack_input||'').slice(0,70)) + '</div>';
+      });
+      body += '</div></details>';
+    }
+    body += '</div>';
+  }
+  openDetail(title, body);
+}
+
+/* ════════════════════════════════════════════════════
+   CHART HELPERS
+════════════════════════════════════════════════════ */
+function _destroyCharts() {
+  _charts.forEach(function(c) { try { c.destroy(); } catch(_){} });
+  _charts = [];
+}
+
+const _CHART_DEFAULTS = {
+  responsive: true,
+  maintainAspectRatio: false,
+  plugins: { legend: { display: false } },
+  scales: {
+    x: { grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b' } },
+    y: { grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b' }, beginAtZero: true }
+  }
+};
+
+function makeLineChart(id, labels, datasets, opts) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  const c = new Chart(ctx, {
+    type: 'line',
+    data: { labels: labels, datasets: datasets },
+    options: Object.assign({}, _CHART_DEFAULTS, opts || {})
+  });
+  _charts.push(c);
+  return c;
+}
+
+function makeBarChart(id, labels, values, colors, opts) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  opts = opts || {};
+  const c = new Chart(ctx, {
+    type: 'bar',
+    data: { labels: labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+    options: Object.assign({}, _CHART_DEFAULTS, {
+      indexAxis: opts.horizontal ? 'y' : 'x',
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: opts.tooltipFmt ? function(ctx) { return opts.tooltipFmt(ctx.parsed.y || ctx.parsed.x); } : undefined } }
+      }
+    }, opts.extra || {})
+  });
+  _charts.push(c);
+  return c;
+}
+
+function makeRadarChart(id, labels, datasets) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  const c = new Chart(ctx, {
+    type: 'radar',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        r: {
+          beginAtZero: true,
+          grid: { color: 'rgba(37,37,74,.8)' },
+          pointLabels: { color: '#94a3b8', font: { size: 10 } },
+          ticks: { display: false }
+        }
+      }
+    }
+  });
+  _charts.push(c);
+  return c;
+}
+
+function makeScatterChart(id, points, labels) {
+  const ctx = document.getElementById(id);
+  if (!ctx) return null;
+  const c = new Chart(ctx, {
+    type: 'scatter',
+    data: {
+      datasets: [{
+        data: points,
+        backgroundColor: 'rgba(192,132,252,.7)',
+        borderColor: '#c084fc',
+        pointRadius: 7,
+        pointHoverRadius: 9
+      }]
+    },
+    options: Object.assign({}, _CHART_DEFAULTS, {
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function(ctx) {
+              const i = ctx.dataIndex;
+              return (labels[i] ? labels[i] + ': ' : '') + '$' + ctx.parsed.y.toFixed(4) + ' / ' + ctx.parsed.x.toFixed(0) + 'ms';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { title: { display: true, text: 'Avg Latency (ms)', color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b' } },
+        y: { title: { display: true, text: 'Total Cost ($)', color: '#64748b', font: { size: 10 } }, grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b' } }
+      }
+    })
+  });
+  _charts.push(c);
+  return c;
+}
+
+/* ════════════════════════════════════════════════════
+   TAB NAVIGATION
+════════════════════════════════════════════════════ */
+async function showTab(el, name) {
+  // Update sidebar active state
+  document.querySelectorAll('.sidebar-tab').forEach(function(t) {
+    t.classList.remove('active');
+    t.removeAttribute('aria-current');
+    t.setAttribute('aria-selected', 'false');
+  });
+  el.classList.add('active');
+  el.setAttribute('aria-current', 'page');
+  el.setAttribute('aria-selected', 'true');
+  _tab   = name;
+  _tabEl = el;
+  _sortState  = { col: null, dir: 1 };
+  _tableRowFn = null;
+
+  // Update breadcrumb
+  const meta = TAB_META[name] || {};
+  const bc = document.getElementById('breadcrumbTab');
+  if (bc) bc.textContent = meta.label || name;
+
+  // Update main actions toolbar
+  const ma = document.getElementById('mainActions');
+  if (ma) {
+    ma.innerHTML = '';
+    // New Scan button (security / mcp)
+    if (name === 'security' || name === 'mcp') {
+      const nsBtn = document.createElement('button');
+      nsBtn.className = 'btn btn-accent btn-sm';
+      nsBtn.textContent = '+ New Scan';
+      nsBtn.setAttribute('aria-label', 'Configure and start a new scan');
+      nsBtn.onclick = function() { if (window.ConfigModal) ConfigModal.open(name); };
+      ma.appendChild(nsBtn);
+    }
+    // Export button (all tabs with data)
+    if (window.ExportManager) {
+      const expWrap = document.createElement('div');
+      expWrap.style.display = 'inline-block';
+      ExportManager.renderButton(expWrap, name);
+      ma.appendChild(expWrap);
+    }
+  }
+
+  // Reset search bar
+  const sb = document.getElementById('searchBar');
+  if (sb) sb.value = '';
+
+  // Destroy old charts
+  _destroyCharts();
+
+  // Show skeleton
+  const c = document.getElementById('mainContent');
+  c.innerHTML = skeleton();
+
+  try {
+    const res = await fetch(ENDPOINTS[name]);
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + res.statusText);
+    const data = await res.json();
+    _allData[name] = data;
+    renderTab(name, data);
+  } catch(err) {
+    c.innerHTML = '<div class="empty-state" style="color:var(--c-t2)">'
+      + '<div class="empty-icon">⚠</div>'
+      + '<div class="empty-title">Failed to load ' + esc(name) + '</div>'
+      + '<div class="empty-desc">' + esc(err.message) + '</div>'
+      + '<button class="btn btn-outline" style="margin-top:8px" onclick="showTab(_tabEl,_tab)">↺ Retry</button>'
+      + '</div>';
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   RENDER TABS
+════════════════════════════════════════════════════ */
+function renderTab(name, data) {
+  const c = document.getElementById('mainContent');
+
+  /* ── SECURITY ── */
+  if (name === 'security') {
+    const rows = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-security');
+    if (cnt) cnt.textContent = rows.length;
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+
+    const avgVuln   = rows.reduce(function(s,r){ return s+(r.vulnerability_rate||0); },0)/rows.length;
+    const totalCost = rows.reduce(function(s,r){ return s+(r.total_cost_usd||0); },0);
+    const critical  = rows.filter(function(r){ return (r.vulnerability_rate||0)>.15; }).length;
+    const score     = Math.round((1 - avgVuln) * 100);
+    const grade     = score >= 85 ? 'excellent' : score >= 65 ? 'good' : score >= 40 ? 'fair' : 'poor';
+    const gradeLabel= score >= 85 ? 'Excellent' : score >= 65 ? 'Good' : score >= 40 ? 'Fair' : 'At Risk';
+    const ringColor = score >= 85 ? '#4ade80' : score >= 65 ? '#38bdf8' : score >= 40 ? '#fbbf24' : '#f87171';
+    const circ = 2 * Math.PI * 28; // r=28
+    const dashOffset = circ - (score / 100) * circ;
+
+    // Group results by plugin for radar
+    const pluginCounts = {};
+    rows.forEach(function(r) {
+      if (r.results_json) {
+        try {
+          const res = typeof r.results_json === 'string' ? JSON.parse(r.results_json) : r.results_json;
+          if (Array.isArray(res)) {
+            res.forEach(function(item) {
+              const p = (item.plugin || item.template_name || 'other').toLowerCase();
+              if (!pluginCounts[p]) pluginCounts[p] = 0;
+              if (item.vulnerable) pluginCounts[p]++;
+            });
+          }
+        } catch(_) {}
+      }
+    });
+
+    // Map plugins to 6 radar axes
+    const radarAxes   = ['Injection','Jailbreak','PII/Leakage','MultiAgent','Toolchain','Other'];
+    const radarKeywords = [['inject','prompt'],['jailbreak','refuse','escape'],['pii','leak','privacy'],['agent','multi','swarm'],['tool','chain','function'],[]];
+    const radarVals = radarAxes.map(function(_, ai) {
+      const kws = radarKeywords[ai];
+      if (!kws.length) {
+        const known = radarKeywords.slice(0,5).flat();
+        return Object.entries(pluginCounts).filter(function(e){ return !known.some(function(k){ return e[0].includes(k); }); })
+                     .reduce(function(s,e){ return s+e[1]; }, 0);
+      }
+      return Object.entries(pluginCounts).filter(function(e){ return kws.some(function(k){ return e[0].includes(k); }); })
+                   .reduce(function(s,e){ return s+e[1]; }, 0);
+    });
+    const maxRadar = Math.max.apply(null, radarVals) || 1;
+
+    c.innerHTML = '<h2 class="sr-only">Security</h2>'
+      // Health score card
+      + '<div class="health-card">'
+      + '<div class="health-score-ring" role="img" aria-label="Security health score: ' + score + '/100">'
+      + '<svg width="70" height="70" viewBox="0 0 70 70">'
+      + '<circle class="health-ring-bg" cx="35" cy="35" r="28"/>'
+      + '<circle class="health-ring-fill" cx="35" cy="35" r="28"'
+      + ' stroke="' + ringColor + '"'
+      + ' stroke-dasharray="' + circ + '"'
+      + ' stroke-dashoffset="' + dashOffset + '"/>'
+      + '</svg>'
+      + '<div class="health-score-text">' + score + '<small>/100</small></div>'
+      + '</div>'
+      + '<div class="health-info">'
+      + '<div class="health-title">Security Health Score</div>'
+      + '<span class="health-grade ' + grade + '">' + gradeLabel + '</span>'
+      + '<div class="health-detail">'
+      + rows.length + ' scans · avg ' + (avgVuln*100).toFixed(1) + '% vuln rate · $' + totalCost.toFixed(4) + ' spent'
+      + '</div>'
+      + '</div>'
+      + '</div>'
+      // Metric cards
+      + '<div class="metrics-grid">'
+      + '<div class="metric-card"><div class="metric-label">Total Scans</div><div class="metric-value accent">' + rows.length + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Avg Vuln Rate</div><div class="metric-value ' + (avgVuln>.15?'danger':avgVuln>.05?'warn':'success') + '">' + (avgVuln*100).toFixed(1) + '%</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Critical Scans</div><div class="metric-value ' + (critical>0?'danger':'success') + '">' + critical + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Total Cost</div><div class="metric-value info">$' + totalCost.toFixed(4) + '</div></div>'
+      + '</div>'
+      // Charts row
+      + '<div class="charts-row">'
+      + '<div class="card"><div class="card-title">Vulnerability Trend</div><div class="chart-wrap"><canvas id="chTrend"></canvas></div></div>'
+      + '<div class="card"><div class="card-title">Attack Exposure Radar</div><div class="chart-wrap"><canvas id="chRadar"></canvas></div></div>'
+      + '</div>'
+      // Table
+      + '<div class="card"><div class="card-title">Red Team Reports</div>'
+      + '<div class="table-toolbar"><input class="table-search" placeholder="Filter…" oninput="filterTable(this.value)" aria-label="Filter table"></div>'
+      + buildTable(rows,
+          ['target_fn','model','total_attacks','vulnerable_count','vulnerability_rate','total_cost_usd','created_at'],
+          ['Target','Model','Attacks','Vulns','Vuln Rate','Cost','Date'],
+          rowClick)
+      + '</div>';
+
+    // Inject compare checkboxes into the security table
+    setTimeout(function() {
+      const tbl = document.querySelector('#mainContent .data-table');
+      if (tbl && window.injectCompareCheckboxes) injectCompareCheckboxes(tbl, rows);
+    }, 0);
+
+    // Trend line
+    const trendLabels = rows.slice().reverse().map(function(r,i){ return '#' + (i+1); });
+    const trendVals   = rows.slice().reverse().map(function(r){ return +((r.vulnerability_rate||0)*100).toFixed(1); });
+    makeLineChart('chTrend', trendLabels, [{
+      data: trendVals,
+      borderColor: '#c084fc',
+      backgroundColor: 'rgba(192,132,252,.1)',
+      fill: true,
+      tension: .35,
+      pointRadius: 3,
+      pointBackgroundColor: '#c084fc'
+    }], {
+      plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(ctx){ return ctx.parsed.y.toFixed(1) + '% vuln'; } } } },
+      scales: {
+        x: { grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b', font: { size: 10 } } },
+        y: { grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b', callback: function(v){ return v + '%'; } }, beginAtZero: true }
+      }
+    });
+
+    // Radar
+    makeRadarChart('chRadar', radarAxes, [{
+      data: radarVals.map(function(v){ return maxRadar > 0 ? (v/maxRadar*10).toFixed(1) : 0; }),
+      borderColor: '#c084fc',
+      backgroundColor: 'rgba(192,132,252,.15)',
+      pointBackgroundColor: '#c084fc',
+      pointRadius: 3,
+      borderWidth: 2
+    }]);
+
+  /* ── MCP ── */
+  } else if (name === 'mcp') {
+    const rows = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-mcp');
+    if (cnt) cnt.textContent = rows.length;
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+    const totalTests = rows.reduce(function(s,r){ return s+(r.total_tests||0); }, 0);
+    const totalVulns = rows.reduce(function(s,r){ return s+(r.vulnerable_count||0); }, 0);
+    c.innerHTML = '<h2 class="sr-only">MCP Scans</h2>'
+      + '<div class="metrics-grid">'
+      + '<div class="metric-card"><div class="metric-label">MCP Scans</div><div class="metric-value accent">' + rows.length + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Total Tests</div><div class="metric-value info">' + totalTests + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Vulnerabilities</div><div class="metric-value ' + (totalVulns>0?'danger':'success') + '">' + totalVulns + '</div></div>'
+      + '</div>'
+      + '<div class="card"><div class="card-title">MCP Security Scans</div>'
+      + '<div class="table-toolbar"><input class="table-search" placeholder="Filter…" oninput="filterTable(this.value)" aria-label="Filter table"></div>'
+      + buildTable(rows,
+          ['endpoint','total_tests','vulnerable_count','created_at'],
+          ['Endpoint','Tests','Vulns','Date'], rowClick)
+      + '</div>';
+
+  /* ── EVAL ── */
+  } else if (name === 'eval') {
+    const rows = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-eval');
+    if (cnt) cnt.textContent = rows.length;
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+
+    // Pass rate bar chart if available
+    const hasRate = rows.some(function(r){ return typeof r.pass_rate === 'number'; });
+    let chartHtml = '';
+    if (hasRate) {
+      chartHtml = '<div class="card"><div class="card-title">Pass Rate by Experiment</div><div class="chart-wrap"><canvas id="chEval"></canvas></div></div>';
+    }
+
+    c.innerHTML = '<h2 class="sr-only">Eval</h2>'
+      + '<div class="metrics-grid">'
+      + '<div class="metric-card"><div class="metric-label">Experiments</div><div class="metric-value accent">' + rows.length + '</div></div>'
+      + '</div>'
+      + chartHtml
+      + '<div class="card"><div class="card-title">Experiments</div>'
+      + '<div class="table-toolbar"><input class="table-search" placeholder="Filter…" oninput="filterTable(this.value)" aria-label="Filter table"></div>'
+      + buildTable(rows,
+          ['name','function_name','git_commit','created_at'],
+          ['Name','Function','Git Commit','Date'], rowClick)
+      + '</div>';
+
+    if (hasRate) {
+      const rateRows = rows.filter(function(r){ return typeof r.pass_rate === 'number'; }).slice(0,12);
+      const vals  = rateRows.map(function(r){ return +(r.pass_rate*100).toFixed(1); });
+      const cols  = vals.map(function(v){ return v >= 80 ? 'rgba(74,222,128,.8)' : v >= 50 ? 'rgba(251,191,36,.8)' : 'rgba(248,113,113,.8)'; });
+      makeBarChart('chEval', rateRows.map(function(r){ return (r.name||'').slice(0,16); }), vals, cols, {
+        tooltipFmt: function(v){ return v + '% pass rate'; },
+        extra: { scales: { y: { ticks: { callback: function(v){ return v+'%'; }, color:'#64748b' }, grid: { color:'rgba(37,37,74,.6)' } }, x: { grid: { color:'rgba(37,37,74,.6)' }, ticks: { color:'#64748b' } } } }
+      });
+    }
+
+  /* ── MONITOR ── */
+  } else if (name === 'monitor') {
+    const rows = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-monitor');
+    if (cnt) cnt.textContent = rows.length;
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+
+    const errorCount = rows.filter(function(r){ return r.error; }).length;
+    const durs = rows.map(function(r){ return r.end_time && r.start_time ? (r.end_time - r.start_time) * 1000 : 0; }).filter(Boolean);
+    const maxDur = Math.max.apply(null, durs) || 1;
+
+    let timelineHtml = '<div class="trace-timeline">';
+    rows.slice(0, 30).forEach(function(r, i) {
+      const dur    = r.end_time && r.start_time ? ((r.end_time - r.start_time) * 1000) : 0;
+      const pct    = maxDur > 0 ? Math.max(3, (dur / maxDur * 100)).toFixed(0) : 3;
+      const isErr  = !!r.error;
+      const durStr = dur > 1000 ? (dur/1000).toFixed(2) + 's' : dur.toFixed(0) + 'ms';
+      timelineHtml += '<div class="trace-row" onclick="traceClick(' + i + ')" role="button" tabindex="0">'
+        + '<div class="trace-name">' + esc((r.name||'trace').slice(0,28)) + '</div>'
+        + '<div class="trace-bar-wrap"><div class="trace-bar ' + (isErr?'error':'ok') + '" style="width:' + pct + '%"></div></div>'
+        + '<div class="trace-dur">' + (dur ? durStr : '—') + '</div>'
+        + '<div class="trace-status"><span class="badge ' + (isErr ? 'badge-critical' : 'badge-low') + '">' + (isErr ? 'Error' : 'OK') + '</span></div>'
+        + '</div>';
+    });
+    timelineHtml += '</div>';
+
+    c.innerHTML = '<h2 class="sr-only">Monitor</h2>'
+      + '<div class="metrics-grid">'
+      + '<div class="metric-card"><div class="metric-label">Traces</div><div class="metric-value accent">' + rows.length + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Errors</div><div class="metric-value ' + (errorCount>0?'danger':'success') + '">' + errorCount + '</div></div>'
+      + '</div>'
+      + '<div class="card"><div class="card-title">Trace Timeline</div>' + timelineHtml + '</div>';
+
+    _tableData = rows.slice();
+
+  /* ── LATENCY ── */
+  } else if (name === 'latency') {
+    const rows = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-latency');
+    if (cnt) cnt.textContent = rows.length + ' endpoints';
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+
+    const p50avg  = rows.reduce(function(s,r){ return s+(r.p50_ms||0); }, 0) / rows.length;
+    const p95avg  = rows.reduce(function(s,r){ return s+(r.p95_ms||0); }, 0) / rows.length;
+    const p99avg  = rows.reduce(function(s,r){ return s+(r.p99_ms||0); }, 0) / rows.length;
+    const slow    = rows.filter(function(r){ return (r.p95_ms||0) > 2000; }).length;
+
+    c.innerHTML = '<h2 class="sr-only">Latency</h2>'
+      + '<div class="metrics-grid">'
+      + '<div class="metric-card"><div class="metric-label">Endpoints</div><div class="metric-value accent">' + rows.length + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Avg p50</div><div class="metric-value info">' + Math.round(p50avg) + 'ms</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Avg p95</div><div class="metric-value ' + (p95avg>2000?'danger':p95avg>1000?'warn':'success') + '">' + Math.round(p95avg) + 'ms</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Slow (p95>2s)</div><div class="metric-value ' + (slow>0?'danger':'success') + '">' + slow + '</div></div>'
+      + '</div>'
+      + '<div class="card"><div class="card-title">Latency Distribution (Box Plot)</div>'
+      + '<div class="chart-wrap" style="min-height:280px"><canvas id="chLatency"></canvas></div></div>'
+      + '<div class="card"><div class="card-title">Endpoint Latency Breakdown</div>'
+      + buildTable(rows,
+          ['endpoint','calls','p50_ms','p95_ms','p99_ms','error_rate'],
+          ['Endpoint','Calls','p50','p95','p99','Error Rate'])
+      + '</div>';
+
+    setTimeout(function() {
+      if (window.makeBoxPlot) makeBoxPlot('chLatency', rows);
+    }, 50);
+
+  /* ── COSTS ── */
+  } else if (name === 'costs') {
+    const rows = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-costs');
+    if (cnt) cnt.textContent = rows.length + ' models';
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+
+    const total   = rows.reduce(function(s,r){ return s+(r.total_cost||0); }, 0);
+    const calls   = rows.reduce(function(s,r){ return s+(r.calls||0); }, 0);
+    const maxCost = Math.max.apply(null, rows.map(function(r){ return r.total_cost||0; })) || 1;
+
+    // Progress bars
+    let barsHtml = '<div class="card"><div class="card-title">Spend by Model</div>';
+    rows.forEach(function(r) {
+      const pct   = ((r.total_cost||0) / maxCost * 100).toFixed(0);
+      const share = total > 0 ? ((r.total_cost||0) / total * 100).toFixed(0) : 0;
+      barsHtml += '<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">'
+        + '<div style="width:120px;font-size:11px;color:var(--c-t2);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + esc(r.model) + '">' + esc((r.model||'?').slice(0,16)) + '</div>'
+        + '<div style="flex:1;height:8px;background:var(--c-card-hover);border-radius:4px;overflow:hidden"><div style="height:100%;width:' + pct + '%;background:var(--c-accent);border-radius:4px"></div></div>'
+        + '<div style="width:90px;font-size:11px;color:var(--c-t2)">$' + (r.total_cost||0).toFixed(4) + ' <span style="color:var(--c-t3)">(' + share + '%)</span></div>'
+        + '</div>';
+    });
+    barsHtml += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--c-border);display:flex;justify-content:space-between;font-size:12px">'
+      + '<span style="color:var(--c-t3)">Total LLM spend</span><span style="font-weight:700;color:var(--c-accent)">$' + total.toFixed(4) + '</span></div>';
+    barsHtml += '</div>';
+
+    c.innerHTML = '<h2 class="sr-only">Costs</h2>'
+      + '<div class="metrics-grid">'
+      + '<div class="metric-card"><div class="metric-label">Models</div><div class="metric-value accent">' + rows.length + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Total Calls</div><div class="metric-value info">' + calls + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Total Cost</div><div class="metric-value warn">$' + total.toFixed(4) + '</div></div>'
+      + '</div>'
+      + barsHtml
+      + '<div class="charts-row">'
+      + '<div class="card"><div class="card-title">Cost per Model</div><div class="chart-wrap"><canvas id="chCosts"></canvas></div></div>'
+      + '<div class="card"><div class="card-title">Cost vs Latency</div><div class="chart-wrap"><canvas id="chScatter"></canvas></div></div>'
+      + '</div>'
+      + '<div class="card"><div class="card-title">Breakdown</div>'
+      + buildTable(rows, ['model','calls','total_cost','avg_ms'], ['Model','Calls','Total Cost','Avg Latency'])
+      + '</div>';
+
+    // Cost bar chart
+    const costVals   = rows.map(function(r){ return +(r.total_cost||0).toFixed(4); });
+    const costColors = rows.map(function(_,i){ const alpha = .6 + (i/rows.length*.3); return 'rgba(192,132,252,' + alpha + ')'; });
+    makeBarChart('chCosts', rows.map(function(r){ return (r.model||'?').slice(0,12); }), costVals, costColors, {
+      tooltipFmt: function(v){ return '$' + v.toFixed(4); }
+    });
+
+    // Scatter
+    const scatterPts = rows.map(function(r){ return { x: r.avg_ms||0, y: r.total_cost||0 }; });
+    const scatterLbls = rows.map(function(r){ return r.model||'?'; });
+    makeScatterChart('chScatter', scatterPts, scatterLbls);
+
+    // Fetch daily data for area chart (best effort)
+    fetch('/api/costs/daily?days=30').then(function(res){ return res.json(); }).then(function(daily) {
+      if (!Array.isArray(daily) || !daily.length) return;
+      // Inject area chart before breakdown table
+      const dailyCard = document.createElement('div');
+      dailyCard.className = 'card';
+      dailyCard.style.marginBottom = '16px';
+      dailyCard.innerHTML = '<div class="card-title">Daily Spend (30d)</div><div class="chart-wrap"><canvas id="chDaily"></canvas></div>';
+      const breakdownCard = document.querySelector('#mainContent .card:last-child');
+      if (breakdownCard) breakdownCard.parentNode.insertBefore(dailyCard, breakdownCard);
+      const dailyLabels = daily.map(function(r){ return r.date; });
+      const dailyVals   = daily.map(function(r){ return +(r.cost||0).toFixed(6); });
+      makeLineChart('chDaily', dailyLabels, [{
+        data: dailyVals,
+        borderColor: '#c084fc',
+        backgroundColor: 'rgba(192,132,252,.12)',
+        fill: true,
+        tension: .3,
+        pointRadius: 2,
+        pointBackgroundColor: '#c084fc'
+      }], {
+        scales: {
+          x: { grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b', maxTicksLimit: 8 } },
+          y: { grid: { color: 'rgba(37,37,74,.6)' }, ticks: { color: '#64748b', callback: function(v){ return '$' + v.toFixed(4); } }, beginAtZero: true }
+        }
+      });
+    }).catch(function(){});
+
+  /* ── REVIEW ── */
+  } else if (name === 'review') {
+    const items = Array.isArray(data) ? data : (data.pending || []);
+    const cnt = document.getElementById('cnt-review');
+    if (cnt) cnt.textContent = items.length;
+    if (!items.length) { c.innerHTML = emptyState(name); return; }
+    c.innerHTML = '<h2 class="sr-only">Review</h2>'
+      + '<div class="card"><div class="card-title">Annotation Queue</div>'
+      + buildTable(items,
+          ['result_id','plugin','severity','label','reviewer','created_at'],
+          ['Result ID','Plugin','Severity','Label','Reviewer','Date'])
+      + '</div>';
+
+  /* ── COMPLIANCE ── */
+  } else if (name === 'compliance') {
+    const items = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-compliance');
+    if (cnt) cnt.textContent = items.length;
+    if (!items.length) { c.innerHTML = emptyState(name); return; }
+    const passed = items.filter(function(r){ return r.overall_status === 'pass' || r.overall_status === 'compliant'; }).length;
+    c.innerHTML = '<h2 class="sr-only">Compliance</h2>'
+      + '<div class="metrics-grid">'
+      + '<div class="metric-card"><div class="metric-label">Reports</div><div class="metric-value accent">' + items.length + '</div></div>'
+      + '<div class="metric-card"><div class="metric-label">Passing</div><div class="metric-value ' + (passed===items.length?'success':'warn') + '">' + passed + '/' + items.length + '</div></div>'
+      + '</div>'
+      + '<div class="card"><div class="card-title">Compliance Reports</div>'
+      + buildTable(items, ['framework','overall_status','created_at'], ['Framework','Status','Date'], rowClick)
+      + '</div>';
+
+  /* ── GIT ── */
+  } else if (name === 'git') {
+    const rows = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-git');
+    if (cnt) cnt.textContent = rows.length;
+    if (!rows.length) { c.innerHTML = emptyState(name); return; }
+
+    // Regression detection
+    let regWarning = '';
+    if (rows.length >= 2) {
+      const last = rows[0].avg_vuln_rate || 0;
+      const prev = rows[1].avg_vuln_rate || 0;
+      if (last > prev * 1.05) {
+        regWarning = '<div style="background:var(--c-danger-dim);border:1px solid rgba(248,113,113,.3);border-radius:var(--r);padding:10px 14px;margin-bottom:16px;font-size:12px;color:var(--c-danger)">'
+          + '⚠ Regression detected: latest commit vuln rate ' + (last*100).toFixed(1) + '% vs previous ' + (prev*100).toFixed(1) + '%'
+          + '</div>';
+      }
+    }
+
+    c.innerHTML = '<h2 class="sr-only">Git</h2>'
+      + regWarning
+      + '<div class="card"><div class="card-title">Vuln Rate per Commit</div><div class="chart-wrap"><canvas id="chGit"></canvas></div></div>'
+      + '<div class="card"><div class="card-title">Git Regression History</div>'
+      + buildTable(rows,
+          ['git_commit','scans','avg_vuln_rate','total_cost'],
+          ['Commit','Scans','Avg Vuln Rate','Total Cost'])
+      + '</div>';
+
+    const gitLabels = rows.slice().reverse().map(function(r){ return (r.git_commit||'?').slice(0,7); });
+    const gitVals   = rows.slice().reverse().map(function(r){ return +((r.avg_vuln_rate||0)*100).toFixed(1); });
+    const gitColors = gitVals.map(function(v){ return v > 15 ? 'rgba(248,113,113,.8)' : v > 5 ? 'rgba(251,191,36,.8)' : 'rgba(74,222,128,.8)'; });
+    makeBarChart('chGit', gitLabels, gitVals, gitColors, {
+      tooltipFmt: function(v){ return v + '% avg vuln rate'; },
+      extra: { scales: { y: { ticks: { callback: function(v){ return v+'%'; }, color:'#64748b' }, grid: { color:'rgba(37,37,74,.6)' } }, x: { grid: { color:'rgba(37,37,74,.6)' }, ticks: { color:'#64748b' } } } }
+    });
+
+  /* ── FALLBACK ── */
+  } else {
+    c.innerHTML = '<div class="card"><div class="card-title">' + esc(name) + '</div>'
+      + '<pre style="font-size:11px;overflow:auto;color:var(--c-t2)">' + esc(JSON.stringify(data,null,2)) + '</pre></div>';
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   TRACE CLICK (Monitor tab)
+════════════════════════════════════════════════════ */
+function traceClick(i) {
+  const row = _tableData[i];
+  if (!row) return;
+  const title = row.name || 'Trace #' + i;
+  const dur = row.end_time && row.start_time ? ((row.end_time - row.start_time) * 1000).toFixed(0) + 'ms' : '—';
+  let body = '<div class="detail-section"><div class="detail-section-title">Trace Info</div><div class="detail-kv">'
+    + '<span class="detail-k">ID</span><span class="detail-v mono">' + esc(row.id||'—') + '</span>'
+    + '<span class="detail-k">Name</span><span class="detail-v">' + esc(row.name||'—') + '</span>'
+    + '<span class="detail-k">Duration</span><span class="detail-v">' + esc(dur) + '</span>'
+    + '<span class="detail-k">Status</span><span class="detail-v">' + (row.error ? '<span class="badge badge-critical">Error</span>' : '<span class="badge badge-low">OK</span>') + '</span>'
+    + (row.user_id ? '<span class="detail-k">User</span><span class="detail-v">' + esc(row.user_id) + '</span>' : '')
+    + (row.error   ? '<span class="detail-k">Error</span><span class="detail-v" style="color:var(--c-danger)">' + esc(String(row.error).slice(0,200)) + '</span>' : '')
+    + '</div></div>';
+
+  // Fetch spans and render waterfall
+  fetch('/api/monitor/traces/' + encodeURIComponent(row.id) + '/spans')
+    .then(function(r){ return r.json(); })
+    .then(function(spans) {
+      if (!Array.isArray(spans) || !spans.length) return;
+      const spansSection = document.createElement('div');
+      spansSection.className = 'detail-section';
+      spansSection.innerHTML = '<div class="detail-section-title">Spans (' + spans.length + ')</div>'
+        + '<div id="spanWaterfall_' + row.id + '"></div>';
+      const detailBody = document.getElementById('detailBody');
+      detailBody.innerHTML = body;
+      detailBody.appendChild(spansSection);
+      if (window.renderSpanWaterfall) {
+        renderSpanWaterfall(
+          'spanWaterfall_' + row.id,
+          row.start_time || 0,
+          row.end_time   || (row.start_time ? row.start_time + 1 : 1),
+          spans
+        );
+      }
+    })
+    .catch(function(){});
+
+  openDetail(title, body);
+}
+
+/* ════════════════════════════════════════════════════
+   GLOBAL SEARCH (Cmd+K)
+════════════════════════════════════════════════════ */
+document.addEventListener('keydown', function(e) {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    openSearch();
+  }
+  if (e.key === 'Escape') {
+    closeSearch();
+    closeDetail();
+  }
+});
+
+function openSearch() {
+  document.getElementById('searchBackdrop').classList.add('open');
+  setTimeout(function(){ document.getElementById('searchModalInput').focus(); }, 50);
+  runSearch('');
+}
+
+function closeSearch(e) {
+  if (!e || e.target === document.getElementById('searchBackdrop')) {
+    document.getElementById('searchBackdrop').classList.remove('open');
+  }
+}
+
+function runSearch(q) {
+  q = q.toLowerCase().trim();
+  const wrap = document.getElementById('searchModalResults');
+  let results = [];
+  Object.entries(_allData).forEach(function(entry) {
+    const tabName = entry[0], data = entry[1];
+    const rows = Array.isArray(data) ? data : (data.pending || []);
+    rows.forEach(function(r) {
+      const text = JSON.stringify(r).toLowerCase();
+      if (!q || text.includes(q)) {
+        const label = r.target_fn || r.fn_name || r.name || r.endpoint || r.framework || r.git_commit || 'Item';
+        results.push({ tab: tabName, label: label, meta: (TAB_META[tabName]||{}).label || tabName });
+      }
+    });
+  });
+  results = results.slice(0, 20);
+  if (!results.length) {
+    wrap.innerHTML = '<div class="search-empty">' + (q ? 'No results for "' + esc(q) + '"' : 'Start typing to search across all tabs…') + '</div>';
+    return;
+  }
+  wrap.innerHTML = results.map(function(r) {
+    const safeTab = r.tab.replace(/'/g,"&#39;");
+    return '<div class="search-result" onclick="jumpTo(\'' + safeTab + '\')">'
+      + '<span style="font-size:13px">' + (TAB_META[r.tab]||{}).icon || '•' + '</span>'
+      + '<span class="search-result-label">' + esc(String(r.label).slice(0,60)) + '</span>'
+      + '<span class="search-result-meta">' + esc(r.meta) + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function jumpTo(tabName) {
+  document.getElementById('searchBackdrop').classList.remove('open');
+  const tabEl = document.querySelector('.sidebar-tab[data-tab="' + tabName + '"]');
+  if (tabEl) tabEl.click();
+}
+
+/* ════════════════════════════════════════════════════
+   WEBSOCKET
+════════════════════════════════════════════════════ */
+(function wsConnect() {
+  const dot = document.getElementById('wsStatus');
+  try {
+    const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const ws = new WebSocket(proto + '//' + location.host + '/ws');
+    ws.onopen = function() {
+      if (dot) { dot.style.background = 'var(--c-success)'; dot.title = 'WebSocket: connected'; }
+    };
+    ws.onmessage = function(e) {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.type === 'scan_completed') { toast('Scan completed', 'success'); showTab(_tabEl, _tab); }
+        else if (msg.type === 'refresh')   { showTab(_tabEl, _tab); }
+      } catch(_) {}
+    };
+    ws.onclose = function() {
+      if (dot) { dot.style.background = 'var(--c-danger)'; dot.title = 'WebSocket: disconnected'; }
+      setTimeout(wsConnect, 5000);
+    };
+    ws.onerror = function() {
+      if (dot) { dot.style.background = 'var(--c-warn)'; dot.title = 'WebSocket: error'; }
+    };
+    setInterval(function() { if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'ping' })); }, 30000);
+  } catch(_) {
+    if (dot) { dot.style.background = 'var(--c-warn)'; dot.title = 'WebSocket: unavailable'; }
+  }
+})();
+
+/* ════════════════════════════════════════════════════
+   VERSION BADGE
+════════════════════════════════════════════════════ */
+fetch('/api/security/reports?limit=1').then(function(r){ return r.headers.get('x-pyntrace-version') || ''; })
+  .then(function(v){ if(v){ const el=document.getElementById('versionBadge'); if(el) el.textContent='v'+v; } })
+  .catch(function(){});
+
+/* ════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════ */
+(function() {
+  const el = document.querySelector('.sidebar-tab[data-tab="security"]');
+  _tabEl = el;
+  showTab(el, 'security');
+})();
+</script>
+<script src="/static/charts.js"></script>
+<script src="/static/compare.js"></script>
+</body>
+</html>

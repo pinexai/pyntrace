@@ -567,11 +567,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sa
 .search-hint { position: absolute; right: 9px; top: 50%; transform: translateY(-50%);
                color: var(--text-3); font-size: 11px; pointer-events: none; }
 @media(max-width:600px){ .search-wrap { display: none; } }
+/* ── Screen-reader only (visually hidden, SR accessible) ──── */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden;
+           clip: rect(0,0,0,0); white-space: nowrap; }
 /* ── Tabs ───────────────────────────────────────────────────── */
 .tabs { display: flex; background: var(--bg-surface); border-bottom: 1px solid var(--border);
         padding: 0 20px; overflow-x: auto; scrollbar-width: none; gap: 0; }
 .tabs::-webkit-scrollbar { display: none; }
-.tab { padding: 11px 18px; cursor: pointer; border-bottom: 2px solid transparent;
+.tab { padding: 13px 18px; min-height: 44px; cursor: pointer; border-bottom: 2px solid transparent;
        color: var(--text-2); font-size: 13px; font-weight: 500;
        transition: color .15s, border-color .15s; white-space: nowrap; outline: none;
        display: flex; align-items: center; gap: 6px; user-select: none; }
@@ -745,7 +748,7 @@ tbody tr:hover td { background: var(--bg-hover); }
   </div>
 </div>
 
-<div class="tabs" id="tabBar" role="tablist" aria-label="Dashboard sections">
+<nav aria-label="Dashboard sections"><div class="tabs" id="tabBar" role="tablist" aria-label="Dashboard sections">
   <div class="tab active" role="tab" tabindex="0" aria-selected="true"  onclick="showTab(this,'security')"   onkeydown="tabKey(event,this,'security')">Security   <span class="tab-count" id="cnt-security">—</span></div>
   <div class="tab"        role="tab" tabindex="0" aria-selected="false" onclick="showTab(this,'mcp')"        onkeydown="tabKey(event,this,'mcp')">MCP        <span class="tab-count" id="cnt-mcp">—</span></div>
   <div class="tab"        role="tab" tabindex="0" aria-selected="false" onclick="showTab(this,'eval')"       onkeydown="tabKey(event,this,'eval')">Eval       <span class="tab-count" id="cnt-eval">—</span></div>
@@ -754,9 +757,9 @@ tbody tr:hover td { background: var(--bg-hover); }
   <div class="tab"        role="tab" tabindex="0" aria-selected="false" onclick="showTab(this,'review')"     onkeydown="tabKey(event,this,'review')">Review     <span class="tab-count" id="cnt-review">—</span></div>
   <div class="tab"        role="tab" tabindex="0" aria-selected="false" onclick="showTab(this,'compliance')" onkeydown="tabKey(event,this,'compliance')">Compliance <span class="tab-count" id="cnt-compliance">—</span></div>
   <div class="tab"        role="tab" tabindex="0" aria-selected="false" onclick="showTab(this,'git')"        onkeydown="tabKey(event,this,'git')">Git        <span class="tab-count" id="cnt-git">—</span></div>
-</div>
+</div></nav>
 
-<div class="content" id="content" role="tabpanel"></div>
+<main class="content" id="content" role="tabpanel" aria-live="polite"></main>
 
 <!-- Detail panel -->
 <div class="overlay" id="overlay" onclick="closeDetail()"></div>
@@ -1093,6 +1096,10 @@ function barChart(id, labels, values, colors, opts) {
 /* ── Renderers ────────────────────────────────────────────── */
 function renderTab(name, data) {
   const c = document.getElementById('content');
+  // Prepend a visually-hidden h2 for screen-reader heading hierarchy (h1→h2→h3)
+  const TAB_LABELS = {security:'Security',mcp:'MCP Scans',eval:'Eval',monitor:'Monitor',
+                      costs:'Costs',review:'Review',compliance:'Compliance',git:'Git'};
+  const _h2Prefix = '<h2 class="sr-only">' + (TAB_LABELS[name] || name) + '</h2>';
 
   if (name === 'security') {
     const rows = Array.isArray(data) ? data : [];
@@ -1106,8 +1113,8 @@ function renderTab(name, data) {
     const totalCost     = rows.reduce(function(s, r) { return s + (r.total_cost_usd || 0); }, 0);
     const criticalScans = rows.filter(function(r) { return (r.vulnerability_rate || 0) > .15; }).length;
 
-    c.innerHTML =
-      '<div class="stats-grid">'
+    c.innerHTML = _h2Prefix
+      + '<div class="stats-grid">'
       + '<div class="stat-card"><div class="sv sv-accent">' + totalScans + '</div><div class="sl">Total scans</div></div>'
       + '<div class="stat-card"><div class="sv ' + (avgVuln > .15 ? 'sv-danger' : avgVuln > .05 ? 'sv-warning' : 'sv-success') + '">\'
         + (avgVuln * 100).toFixed(1) + '%</div><div class="sl">Avg vuln rate</div></div>'
@@ -1135,7 +1142,7 @@ function renderTab(name, data) {
     const cntEl = document.getElementById('cnt-mcp');
     if (cntEl) cntEl.textContent = rows.length;
     if (!rows.length) { c.innerHTML = emptyState(name); return; }
-    c.innerHTML = '<div class="card"><h3>MCP Security Scans</h3>'
+    c.innerHTML = _h2Prefix + '<div class="card"><h3>MCP Security Scans</h3>'
       + buildTable(rows,
           ['endpoint','total_tests','vulnerable_count','created_at'],
           ['Endpoint','Tests','Vulns','Date'], rowClick)
@@ -1147,7 +1154,7 @@ function renderTab(name, data) {
     const cntEl = document.getElementById('cnt-eval');
     if (cntEl) cntEl.textContent = rows.length;
     if (!rows.length) { c.innerHTML = emptyState(name); return; }
-    c.innerHTML = '<div class="card"><h3>Experiments</h3>'
+    c.innerHTML = _h2Prefix + '<div class="card"><h3>Experiments</h3>'
       + buildTable(rows,
           ['name','function_name','git_commit','created_at'],
           ['Name','Function','Git Commit','Date'], rowClick)
@@ -1165,7 +1172,7 @@ function renderTab(name, data) {
       const err = r.error ? '⚠️ Error' : '✓ OK';
       return Object.assign({}, r, { _dur: dur, _status: err });
     });
-    c.innerHTML = '<div class="card"><h3>Production Traces</h3>'
+    c.innerHTML = _h2Prefix + '<div class="card"><h3>Production Traces</h3>'
       + buildTable(enriched,
           ['name','_status','_dur','user_id','created_at'],
           ['Trace','Status','Duration','User','Date'], function(i) {
@@ -1200,7 +1207,7 @@ function renderTab(name, data) {
       + '<span style="color:var(--text-2)">Total LLM spend</span>'
       + '<span style="font-weight:700;color:var(--accent)">$' + total.toFixed(4) + '</span></div>';
     barsHtml += '</div>';
-    c.innerHTML = barsHtml
+    c.innerHTML = _h2Prefix + barsHtml
       + '<div class="card"><h3>Breakdown</h3>'
       + buildTable(rows, ['model','calls','total_cost','avg_ms'], ['Model','Calls','Total Cost','Avg Latency'])
       + '</div>';
@@ -1210,7 +1217,7 @@ function renderTab(name, data) {
     const cntEl = document.getElementById('cnt-review');
     if (cntEl) cntEl.textContent = items.length;
     if (!items.length) { c.innerHTML = emptyState(name); return; }
-    c.innerHTML = '<div class="card"><h3>Annotation Queue</h3>'
+    c.innerHTML = _h2Prefix + '<div class="card"><h3>Annotation Queue</h3>'
       + buildTable(items,
           ['result_id','plugin','severity','label','reviewer','created_at'],
           ['Result ID','Plugin','Severity','Label','Reviewer','Date'])
@@ -1221,7 +1228,7 @@ function renderTab(name, data) {
     const cntEl = document.getElementById('cnt-compliance');
     if (cntEl) cntEl.textContent = items.length;
     if (!items.length) { c.innerHTML = emptyState(name); return; }
-    c.innerHTML = '<div class="card"><h3>Compliance Reports</h3>'
+    c.innerHTML = _h2Prefix + '<div class="card"><h3>Compliance Reports</h3>'
       + buildTable(items,
           ['framework','overall_status','created_at'],
           ['Framework','Status','Date'])
@@ -1232,14 +1239,14 @@ function renderTab(name, data) {
     const cntEl = document.getElementById('cnt-git');
     if (cntEl) cntEl.textContent = rows.length;
     if (!rows.length) { c.innerHTML = emptyState(name); return; }
-    c.innerHTML = '<div class="card"><h3>Git Regression History</h3>'
+    c.innerHTML = _h2Prefix + '<div class="card"><h3>Git Regression History</h3>'
       + buildTable(rows,
           ['git_commit','scans','avg_vuln_rate','total_cost'],
           ['Commit','Scans','Avg Vuln Rate','Total Cost'])
       + '</div>';
 
   } else {
-    c.innerHTML = '<div class="card"><h3>' + escH(name) + '</h3><pre style="font-size:12px;overflow:auto">'
+    c.innerHTML = _h2Prefix + '<div class="card"><h3>' + escH(name) + '</h3><pre style="font-size:12px;overflow:auto">'
       + escH(JSON.stringify(data, null, 2)) + '</pre></div>';
   }
 }
