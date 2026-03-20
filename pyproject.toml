@@ -28,6 +28,16 @@ server  = ["fastapi>=0.100", "uvicorn>=0.20", "websockets>=11.0"]
 eval    = ["jsonschema>=4.0"]
 secure  = ["sqlcipher3", "cryptography>=41.0"]
 full    = ["pyntrace[server,eval,secure]", "sentence-transformers>=2.0"]
+dev     = [
+    "pyntrace[server,eval]",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.9",
+    "mypy>=1.10",
+    "bandit[toml]>=1.7",
+    "pip-audit>=2.7",
+    "pre-commit>=3.7",
+]
 
 [project.scripts]
 pyntrace = "pyntrace.cli:main"
@@ -54,3 +64,13 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
+
+[tool.bandit]
+targets = ["pyntrace"]
+skips = [
+    "B101",  # assert_used — tests use assert
+    "B311",  # random — non-crypto use is intentional for attack fuzzing
+    "B404",  # subprocess — CLI needs subprocess
+    "B603",  # subprocess_without_shell_equals_true — explicit subprocess calls
+    "B607",  # start_process_with_partial_path — CLI tools by name
+]

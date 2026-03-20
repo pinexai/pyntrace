@@ -123,8 +123,24 @@ def create_app(db_path: str | None = None) -> "FastAPI":
             return HTMLResponse(html_path.read_text())
         return HTMLResponse(_FALLBACK_HTML.replace("v0.4.0", f"v{_VERSION}"))
 
+    @app.get("/health", include_in_schema=False)
+    async def health():
+        try:
+            _q("SELECT 1", db_path=db_path)
+            db_status = "ok"
+        except Exception:
+            db_status = "error"
+        return JSONResponse({"status": "ok", "version": _VERSION, "db": db_status})
+
     @app.websocket("/ws")
-    async def websocket_endpoint(ws: WebSocket):
+    async def websocket_endpoint(ws: WebSocket, token: str = ""):
+        # Allow same auth methods as HTTP: API key token or omit if auth disabled
+        _auth_enabled = os.getenv("PYNTRACE_API_KEY") or os.getenv("PYNTRACE_HTPASSWD_FILE")
+        if _auth_enabled:
+            _api_key = os.getenv("PYNTRACE_API_KEY", "")
+            if not token or token != _api_key:
+                await ws.close(code=4401)
+                return
         await manager.connect(ws)
         try:
             while True:
@@ -141,13 +157,41 @@ def create_app(db_path: str | None = None) -> "FastAPI":
     def _clamp_days(days: int) -> int:
         return max(1, min(days, 365))
 
+    def _build_filter(
+        model: str = "", from_ts: float = 0, to_ts: float = 0, table: str = ""
+    ) -> tuple[str, tuple]:
+        """Build a WHERE clause for common model/time filters."""
+        conditions, params = [], []
+        if model:
+            conditions.append("model = ?")
+            params.append(model)
+        if from_ts > 0:
+            conditions.append("created_at >= ?")
+            params.append(from_ts)
+        if to_ts > 0:
+            conditions.append("created_at <= ?")
+            params.append(to_ts)
+        where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+        return where, tuple(params)
+
     # API: Security tab
     @app.get("/api/security/reports")
-    async def get_security_reports(limit: int = 20):
-        limit = _clamp_limit(limit)
+    async def get_security_reports(
+        limit: int = 20, page: int = 1, size: int = 0,
+        model: str = "", from_ts: float = 0, to_ts: float = 0,
+    ):
+        if size > 0:
+            # page/size mode
+            size = max(1, min(size, 200))
+            page = max(1, page)
+            offset = (page - 1) * size
+        else:
+            size = _clamp_limit(limit)
+            offset = 0
+        where, params = _build_filter(model=model, from_ts=from_ts, to_ts=to_ts, table="red_team_reports")
         rows = _q(
-            "SELECT id, target_fn, model, git_commit, total_attacks, vulnerable_count, vulnerability_rate, total_cost_usd, created_at FROM red_team_reports ORDER BY created_at DESC LIMIT ?",
-            (limit,), db_path
+            f"SELECT id, target_fn, model, git_commit, total_attacks, vulnerable_count, vulnerability_rate, total_cost_usd, created_at FROM red_team_reports{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (*params, size, offset), db_path
         )
         return JSONResponse(rows)
 
@@ -230,9 +274,24 @@ def create_app(db_path: str | None = None) -> "FastAPI":
 
     # API: Monitor tab
     @app.get("/api/monitor/traces")
-    async def get_traces(limit: int = 50):
-        limit = _clamp_limit(limit)
-        rows = _q("SELECT id, name, start_time, end_time, user_id, tags, error FROM traces ORDER BY start_time DESC LIMIT ?", (limit,), db_path)
+    async def get_traces(limit: int = 50, page: int = 1, size: int = 0, user_id: str = ""):
+        if size > 0:
+            size = max(1, min(size, 200))
+            page = max(1, page)
+            offset = (page - 1) * size
+        else:
+            size = _clamp_limit(limit)
+            offset = 0
+        if user_id:
+            rows = _q(
+                "SELECT id, name, start_time, end_time, user_id, tags, error FROM traces WHERE user_id=? ORDER BY start_time DESC LIMIT ? OFFSET ?",
+                (user_id, size, offset), db_path,
+            )
+        else:
+            rows = _q(
+                "SELECT id, name, start_time, end_time, user_id, tags, error FROM traces ORDER BY start_time DESC LIMIT ? OFFSET ?",
+                (size, offset), db_path,
+            )
         return JSONResponse(rows)
 
     @app.get("/api/monitor/traces/{trace_id}/spans")
@@ -269,33 +328,80 @@ def create_app(db_path: str | None = None) -> "FastAPI":
 
     # API: Review tab
     @app.get("/api/review/pending")
-    async def get_pending_reviews():
+    async def get_pending_reviews(page: int = 1, size: int = 20):
         from pyntrace.review.annotations import ReviewQueue
         q = ReviewQueue(db_path)
-        return JSONResponse(q.pending())
+        items = q.pending()
+        size = max(1, min(size, 200))
+        page = max(1, page)
+        start = (page - 1) * size
+        return JSONResponse({"items": items[start: start + size], "total": len(items), "page": page, "size": size})
 
-    @app.post("/api/review/annotate")
-    async def create_annotation(body: dict):
-        from pyntrace.review.annotations import annotate
-        ann = annotate(
-            result_id=body["result_id"],
-            label=body["label"],
-            reviewer=body.get("reviewer"),
-            comment=body.get("comment"),
-        )
-        return JSONResponse(ann.to_json())
+    try:
+        from pydantic import BaseModel as _BM
+
+        class _AnnotateBody(_BM):
+            result_id: str
+            label: str
+            reviewer: str | None = None
+            comment: str | None = None
+
+        class _ComplianceBody(_BM):
+            framework: str = "owasp_llm_top10"
+
+        @app.post("/api/review/annotate")
+        async def create_annotation(body: _AnnotateBody):
+            from pyntrace.review.annotations import annotate
+            ann = annotate(
+                result_id=body.result_id,
+                label=body.label,
+                reviewer=body.reviewer,
+                comment=body.comment,
+            )
+            return JSONResponse(ann.to_json())
+
+        @app.post("/api/compliance/generate")
+        async def generate_compliance(body: _ComplianceBody):
+            from pyntrace.compliance import generate_report
+            report = generate_report(framework=body.framework)
+            return JSONResponse(report.to_json())
+
+    except ImportError:
+        # Pydantic not available — fall back to unvalidated dict
+        @app.post("/api/review/annotate")  # type: ignore[no-redef]
+        async def create_annotation(body: dict):  # type: ignore[no-redef]
+            from pyntrace.review.annotations import annotate
+            ann = annotate(
+                result_id=body["result_id"],
+                label=body["label"],
+                reviewer=body.get("reviewer"),
+                comment=body.get("comment"),
+            )
+            return JSONResponse(ann.to_json())
+
+        @app.post("/api/compliance/generate")  # type: ignore[no-redef]
+        async def generate_compliance(body: dict):  # type: ignore[no-redef]
+            from pyntrace.compliance import generate_report
+            report = generate_report(framework=body.get("framework", "owasp_llm_top10"))
+            return JSONResponse(report.to_json())
 
     # API: Compliance tab
     @app.get("/api/compliance/reports")
-    async def get_compliance_reports():
-        rows = _q("SELECT * FROM compliance_reports ORDER BY created_at DESC LIMIT 20", db_path=db_path)
+    async def get_compliance_reports(framework: str = "", page: int = 1, size: int = 20):
+        size = max(1, min(size, 200))
+        page = max(1, page)
+        offset = (page - 1) * size
+        if framework:
+            rows = _q(
+                "SELECT * FROM compliance_reports WHERE framework=? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (framework, size, offset), db_path,
+            )
+        else:
+            rows = _q(
+                "SELECT * FROM compliance_reports ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                (size, offset), db_path,
+            )
         return JSONResponse(rows)
-
-    @app.post("/api/compliance/generate")
-    async def generate_compliance(body: dict):
-        from pyntrace.compliance import generate_report
-        report = generate_report(framework=body.get("framework", "owasp_llm_top10"))
-        return JSONResponse(report.to_json())
 
     # API: Git tab
     @app.get("/api/git/history")
@@ -305,10 +411,18 @@ def create_app(db_path: str | None = None) -> "FastAPI":
 
     # API: MCP scan tab (v0.3.0)
     @app.get("/api/mcp-scans")
-    async def get_mcp_scans(limit: int = 20):
+    async def get_mcp_scans(limit: int = 20, page: int = 1, size: int = 0, from_ts: float = 0, to_ts: float = 0):
+        if size > 0:
+            size = max(1, min(size, 200))
+            page = max(1, page)
+            offset = (page - 1) * size
+        else:
+            size = _clamp_limit(limit)
+            offset = 0
+        where, params = _build_filter(from_ts=from_ts, to_ts=to_ts)
         rows = _q(
-            "SELECT id, endpoint, total_tests, vulnerable_count, created_at FROM mcp_scan_reports ORDER BY created_at DESC LIMIT ?",
-            (limit,), db_path
+            f"SELECT id, endpoint, total_tests, vulnerable_count, created_at FROM mcp_scan_reports{where} ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            (*params, size, offset), db_path,
         )
         return JSONResponse(rows)
 

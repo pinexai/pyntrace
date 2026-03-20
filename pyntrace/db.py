@@ -34,6 +34,7 @@ def get_conn(db_path: str | None = None) -> sqlite3.Connection:
             conn.execute(f"PRAGMA key='{key}'")
             conn.row_factory = _sc.Row
             conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA foreign_keys=ON")
             return conn  # type: ignore[return-value]
         except ImportError:
             import warnings
@@ -46,6 +47,7 @@ def get_conn(db_path: str | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(str(p))
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
 
@@ -426,4 +428,34 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 CREATE INDEX IF NOT EXISTS idx_audit_timestamp ON audit_log(timestamp);
 CREATE INDEX IF NOT EXISTS idx_audit_event ON audit_log(event);
+
+-- Performance indexes on all high-traffic ORDER BY / WHERE columns
+CREATE INDEX IF NOT EXISTS idx_llm_calls_timestamp       ON llm_calls(timestamp);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_model           ON llm_calls(model);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_function_name   ON llm_calls(function_name);
+CREATE INDEX IF NOT EXISTS idx_traces_start_time         ON traces(start_time);
+CREATE INDEX IF NOT EXISTS idx_traces_user_id            ON traces(user_id);
+CREATE INDEX IF NOT EXISTS idx_traces_session_id         ON traces(session_id);
+CREATE INDEX IF NOT EXISTS idx_spans_trace_id            ON spans(trace_id);
+CREATE INDEX IF NOT EXISTS idx_spans_span_type           ON spans(span_type);
+CREATE INDEX IF NOT EXISTS idx_scores_trace_id           ON scores(trace_id);
+CREATE INDEX IF NOT EXISTS idx_red_team_reports_created  ON red_team_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_red_team_reports_git      ON red_team_reports(git_commit);
+CREATE INDEX IF NOT EXISTS idx_red_team_reports_model    ON red_team_reports(model);
+CREATE INDEX IF NOT EXISTS idx_experiments_created       ON experiments(created_at);
+CREATE INDEX IF NOT EXISTS idx_experiment_results_exp_id ON experiment_results(experiment_id);
+CREATE INDEX IF NOT EXISTS idx_dataset_items_dataset_id  ON dataset_items(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_mcp_scans_created         ON mcp_scan_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_latency_created           ON latency_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_latency_fn_name           ON latency_reports(fn_name);
+CREATE INDEX IF NOT EXISTS idx_compliance_created        ON compliance_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_compliance_framework      ON compliance_reports(framework);
+CREATE INDEX IF NOT EXISTS idx_review_annotations_created ON review_annotations(created_at);
+CREATE INDEX IF NOT EXISTS idx_review_annotations_label  ON review_annotations(label);
+CREATE INDEX IF NOT EXISTS idx_drift_reports_created     ON drift_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_swarm_scans_created       ON swarm_scan_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_toolchain_reports_created ON toolchain_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_leakage_reports_created   ON leakage_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_multilingual_reports_created ON multilingual_reports(created_at);
+CREATE INDEX IF NOT EXISTS idx_monitoring_events_created ON monitoring_events(created_at);
 """
