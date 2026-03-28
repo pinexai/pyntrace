@@ -30,8 +30,11 @@ def get_conn(db_path: str | None = None) -> sqlite3.Connection:
         try:
             import sqlcipher3.dbapi2 as _sc  # type: ignore[import]
 
+            if "\x00" in key:
+                raise ValueError("PYNTRACE_DB_KEY must not contain null bytes")
             conn = _sc.connect(str(p))
-            conn.execute(f"PRAGMA key='{key}'")
+            safe_key = key.replace("'", "''")
+            conn.execute(f"PRAGMA key='{safe_key}'")
             conn.row_factory = _sc.Row
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA foreign_keys=ON")

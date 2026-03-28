@@ -40,6 +40,25 @@
   --header-h:  52px;
 }
 
+/* ── Light theme overrides ───────────────────────────────── */
+[data-theme="light"] {
+  --c-bg:           #f8fafc;
+  --c-surface:      #f1f5f9;
+  --c-card:         #ffffff;
+  --c-card-hover:   #f0f4f8;
+  --c-border:       #e2e8f0;
+  --c-border-light: #cbd5e1;
+  --c-accent:       #9333ea;
+  --c-accent-dim:   rgba(147, 51, 234, 0.12);
+  --c-accent-glow:  rgba(147, 51, 234, 0.06);
+  --c-t1: #0f172a;
+  --c-t2: #334155;
+  --c-t3: #64748b;
+  --c-t4: #94a3b8;
+  --sh:    0 4px 16px rgba(0, 0, 0, .1);
+  --sh-sm: 0 2px 6px  rgba(0, 0, 0, .08);
+}
+
 /* ── Reset ───────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html { scroll-behavior: smooth; }
@@ -765,6 +784,14 @@ tbody td:first-child { color: var(--c-t1); }
   color: var(--c-t3);
 }
 .btn-ghost:hover { color: var(--c-t1); background: var(--c-card); }
+.btn-accent {
+  background: var(--c-accent);
+  color: #0a0a14;
+  border-color: var(--c-accent);
+}
+.btn-accent:hover { filter: brightness(1.12); }
+.btn-sm { padding: 3px 8px; font-size: 11px; }
+.threat-sev-pill.active { border-color: var(--c-accent); color: var(--c-accent); background: var(--c-accent-glow); }
 .copy-btn {
   background: transparent;
   border: 1px solid var(--c-border);

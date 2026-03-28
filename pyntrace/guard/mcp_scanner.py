@@ -7,6 +7,7 @@ Zero dependencies — uses only Python stdlib urllib.
 from __future__ import annotations
 
 import json
+import ssl
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -407,6 +408,7 @@ def _send_jsonrpc(
     payload: dict | bytes,
     auth_token: str | None,
     timeout: int,
+    insecure: bool = False,
 ) -> tuple[str, int]:
     """Send a JSON-RPC 2.0 request. Returns (response_body, status_code)."""
     if isinstance(payload, bytes):
@@ -429,7 +431,11 @@ def _send_jsonrpc(
         if _p.scheme not in ("http", "https"):
             raise ValueError(f"Unsupported URL scheme: {_p.scheme!r}")
         req = urllib.request.Request(endpoint, data=data, headers=headers, method="POST")
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # nosec B310
+        _ctx = ssl.create_default_context()
+        if insecure:
+            _ctx.check_hostname = False
+            _ctx.verify_mode = ssl.CERT_NONE
+        with urllib.request.urlopen(req, timeout=timeout, context=_ctx) as resp:  # nosec B310
             return resp.read().decode(errors="replace"), resp.status
     except urllib.error.HTTPError as e:
         try:
@@ -480,6 +486,7 @@ def scan_mcp(
     auth_token: str | None = None,
     timeout: int = 10,
     n_fuzzes: int = 5,
+    insecure: bool = False,
     _persist: bool = True,
 ) -> MCPScanReport:
     """

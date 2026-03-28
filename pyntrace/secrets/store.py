@@ -60,6 +60,12 @@ def load_secrets(path: Path | None = None) -> dict[str, str]:
             data = json.loads(raw)
         except Exception:
             return {}
+        if os.getenv("PYNTRACE_STRICT_SECRETS"):
+            raise RuntimeError(
+                "[pyntrace] PYNTRACE_STRICT_SECRETS is set but the secrets file is "
+                "unencrypted (no PYNTRACE_SECRETS_KEY). "
+                "Set PYNTRACE_SECRETS_KEY and run: pip install pyntrace[secure]"
+            )
         warnings.warn(
             "[pyntrace] Secrets file loaded without encryption. "
             "Set PYNTRACE_SECRETS_KEY and run 'pip install pyntrace[secure]' to encrypt."
@@ -89,10 +95,20 @@ def save_secrets(secrets: dict[str, str], path: Path | None = None) -> None:
 
             payload = Fernet(key).encrypt(payload)
         except ImportError:
+            if os.getenv("PYNTRACE_STRICT_SECRETS"):
+                raise RuntimeError(
+                    "[pyntrace] PYNTRACE_STRICT_SECRETS is set but 'cryptography' is "
+                    "not installed. Run: pip install pyntrace[secure]"
+                )
             warnings.warn(
                 "[pyntrace] cryptography not installed — saving secrets as plaintext. "
                 "Run: pip install pyntrace[secure]"
             )
+    elif os.getenv("PYNTRACE_STRICT_SECRETS"):
+        raise RuntimeError(
+            "[pyntrace] PYNTRACE_STRICT_SECRETS is set but no PYNTRACE_SECRETS_KEY "
+            "is configured. Plaintext secret storage is blocked."
+        )
 
     p.write_bytes(payload)
     p.chmod(stat.S_IRUSR | stat.S_IWUSR)  # chmod 600

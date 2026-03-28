@@ -90,6 +90,58 @@ def get_cheaper_alternative(model: str) -> str | None:
     return _TIER_ALTERNATIVES.get(key)
 
 
+def check_budget(
+    max_cost_usd: float,
+    period: str = "day",
+    db_path: str | None = None,
+) -> dict:
+    """Check accumulated LLM spend against a budget threshold.
+
+    Args:
+        max_cost_usd: Alert threshold in USD.
+        period: ``"day"`` (default), ``"week"``, or ``"month"``.
+        db_path: Optional SQLite DB path override.
+
+    Returns:
+        dict with keys: ``total_usd``, ``threshold_usd``, ``pct``, ``over_budget``.
+
+    Emits ``warnings.warn(UserWarning)`` if spend >= 80% of ``max_cost_usd``.
+    """
+    import warnings
+    from pyntrace.db import get_conn
+
+    period_days = {"day": 1, "week": 7, "month": 30}.get(period, 1)
+    try:
+        conn = get_conn(db_path)
+        rows = conn.execute(
+            "SELECT SUM(total_cost_usd) FROM security_reports WHERE "
+            "created_at >= strftime('%s','now') - ?",
+            (period_days * 86400,),
+        ).fetchone()
+        total = float(rows[0] or 0.0)
+    except Exception:
+        total = 0.0
+
+    pct = (total / max_cost_usd * 100) if max_cost_usd > 0 else 0.0
+    over = total >= max_cost_usd
+
+    if pct >= 80:
+        msg = (
+            f"[pyntrace] Budget alert: ${total:.4f} spent this {period} "
+            f"({pct:.1f}% of ${max_cost_usd:.2f} limit)."
+        )
+        if over:
+            msg += " Budget EXCEEDED."
+        warnings.warn(msg, UserWarning, stacklevel=2)
+
+    return {
+        "total_usd": round(total, 6),
+        "threshold_usd": max_cost_usd,
+        "pct": round(pct, 1),
+        "over_budget": over,
+    }
+
+
 def list_models() -> list[dict]:
     """Return all known models with pricing."""
     result = []

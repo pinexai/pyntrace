@@ -153,6 +153,84 @@ class TestPagination:
 
 # ── Filtering ─────────────────────────────────────────────────────────────────
 
+# ── /api/audit-model ─────────────────────────────────────────────────────────
+
+class TestAuditModelEndpoint:
+    def test_missing_path_returns_400(self, client):
+        r = client.post("/api/audit-model", json={})
+        assert r.status_code == 400
+        assert "path" in r.json()["error"]
+
+    def test_nonexistent_file_returns_404(self, client):
+        r = client.post("/api/audit-model", json={"path": "/nonexistent/model.pkl"})
+        assert r.status_code == 404
+
+    def test_real_pickle_returns_report(self, client, tmp_path):
+        import pickle
+        f = tmp_path / "model.pkl"
+        f.write_bytes(pickle.dumps({"weights": [1.0, 2.0]}))
+        r = client.post("/api/audit-model", json={"path": str(f)})
+        assert r.status_code == 200
+        data = r.json()
+        assert "format" in data
+        assert "findings" in data
+        assert "safe" in data
+        assert "sha256" in data
+
+    def test_directory_returns_list(self, client, tmp_path):
+        import pickle
+        (tmp_path / "a.pkl").write_bytes(pickle.dumps({"x": 1}))
+        (tmp_path / "b.pkl").write_bytes(pickle.dumps({"y": 2}))
+        r = client.post("/api/audit-model", json={"path": str(tmp_path)})
+        assert r.status_code == 200
+        data = r.json()
+        assert isinstance(data, list)
+        assert len(data) == 2
+
+    def test_v1_audit_model(self, client, tmp_path):
+        import pickle
+        f = tmp_path / "model.pkl"
+        f.write_bytes(pickle.dumps({"w": 1.0}))
+        r = client.post("/api/v1/audit-model", json={"path": str(f)})
+        assert r.status_code == 200
+        assert "findings" in r.json()
+
+
+# ── /api/plugins ──────────────────────────────────────────────────────────────
+
+class TestPluginsEndpoint:
+    def test_plugins_returns_200(self, client):
+        r = client.get("/api/plugins")
+        assert r.status_code == 200
+
+    def test_plugins_returns_list(self, client):
+        data = client.get("/api/plugins").json()
+        assert isinstance(data, list)
+
+    def test_builtin_plugins_present(self, client):
+        data = client.get("/api/plugins").json()
+        names = {p["name"] for p in data}
+        for builtin in ("jailbreak", "pii", "harmful", "hallucination", "injection", "competitor"):
+            assert builtin in names
+
+    def test_each_plugin_has_required_fields(self, client):
+        for plugin in client.get("/api/plugins").json():
+            assert "name" in plugin
+            assert "category" in plugin
+            assert "builtin" in plugin
+
+    def test_builtin_flag_is_bool(self, client):
+        for plugin in client.get("/api/plugins").json():
+            assert isinstance(plugin["builtin"], bool)
+
+    def test_v1_plugins(self, client):
+        r = client.get("/api/v1/plugins")
+        assert r.status_code == 200
+        assert isinstance(r.json(), list)
+
+
+# ── Filtering ─────────────────────────────────────────────────────────────────
+
 class TestFiltering:
     def test_security_reports_model_filter(self, client):
         r = client.get("/api/security/reports?model=gpt-4o")

@@ -248,12 +248,6 @@ def register_plugin(name: str, fn: Callable[[str], list[str]]) -> None:
     The function signature should be ``fn(prompt: str) -> list[str]``
     where *prompt* is the base harmful prompt (may be empty string).
     """
-    PLUGIN_REGISTRY[name] = type(
-        f"_Custom_{name}",
-        (_FunctionPlugin,),
-        {"name": name, "category": "custom",
-         "_fn": staticmethod(fn), "generate": _FunctionPlugin.generate},
-    )
     # Build a zero-arg-constructible subclass with fn baked in as a class attr
     _fn_static = staticmethod(fn)
 
@@ -307,6 +301,13 @@ def load_file_plugins(plugin_dir: Path | None = None) -> None:
         return
     for py_file in sorted(plugin_dir.glob("*.py")):
         try:
+            import warnings as _w
+            _w.warn(
+                f"[pyntrace] Loading plugin from '{py_file}' — "
+                "only load plugins from sources you trust (arbitrary code execution).",
+                UserWarning,
+                stacklevel=2,
+            )
             spec = importlib.util.spec_from_file_location(py_file.stem, py_file)
             if spec is None or spec.loader is None:
                 continue

@@ -5,7 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>pyntrace Dashboard</title>
 <link rel="stylesheet" href="/static/style.css">
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+        integrity="sha384-vsrfeLOOY6KuIYKDlmVH5UiBmgIdB1oEf7p01YgWHuqmOHfZr374+odEv96n9tNC"
+        crossorigin="anonymous"></script>
 </head>
 <body>
 
@@ -25,6 +27,7 @@
   </div>
   <div class="header-actions">
     <div class="header-status" id="wsStatus" role="img" title="WebSocket: connecting…" aria-label="Connection status: connecting"></div>
+    <button class="header-btn" id="themeToggleBtn" onclick="toggleTheme()" aria-label="Toggle light/dark mode" title="Toggle light/dark mode">☀</button>
     <button class="header-btn" onclick="window.print()" aria-label="Export as PDF" title="Export as PDF">
       <span aria-hidden="true">⬇</span> Export
     </button>
@@ -75,6 +78,16 @@
         <span class="sidebar-label">Git</span>
         <span class="sidebar-count" id="cnt-git">—</span>
       </button>
+      <button class="sidebar-tab" role="tab" data-tab="threats" onclick="showTab(this,'threats')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">🛡</span>
+        <span class="sidebar-label">Threat Feed</span>
+        <span class="sidebar-count" id="cnt-threats">—</span>
+      </button>
+      <button class="sidebar-tab" role="tab" data-tab="model-audit" onclick="showTab(this,'model-audit')" aria-selected="false">
+        <span class="sidebar-icon" aria-hidden="true">🔬</span>
+        <span class="sidebar-label">Model Audit</span>
+        <span class="sidebar-count" id="cnt-model-audit">—</span>
+      </button>
     </div>
     <div class="sidebar-divider"></div>
     <div class="sidebar-section">
@@ -99,12 +112,24 @@
     <div class="breadcrumb">
       pyntrace <span>›</span> <span id="breadcrumbTab">Security</span>
     </div>
-    <div class="main-actions" id="mainActions"></div>
+    <div class="main-actions" id="mainActions">
+      <button class="btn btn-outline" onclick="openSettings()" title="Settings" aria-label="Open settings">⚙ Settings</button>
+    </div>
   </div>
   <div class="main-content" id="mainContent" role="tabpanel" aria-live="polite" aria-label="Tab content">
     <!-- content rendered here -->
   </div>
 </main>
+
+<!-- ═══ SETTINGS DRAWER ═══ -->
+<div class="overlay" id="settingsOverlay" onclick="closeSettings()" style="display:none"></div>
+<div class="detail-panel" id="settingsPanel" role="dialog" aria-modal="true" aria-label="Settings" style="display:none">
+  <div class="detail-header">
+    <span class="detail-title">⚙ Settings</span>
+    <button class="detail-close" onclick="closeSettings()" aria-label="Close settings">✕</button>
+  </div>
+  <div class="detail-body" id="settingsBody">Loading…</div>
+</div>
 
 <!-- ═══ OVERLAY ═══ -->
 <div class="overlay" id="overlay" onclick="closeDetail()"></div>
@@ -147,9 +172,11 @@ const ENDPOINTS = {
   monitor:    '/api/monitor/traces',
   latency:    '/api/latency',
   costs:      '/api/costs/summary',
-  review:     '/api/review/pending',
-  compliance: '/api/compliance/reports',
-  git:        '/api/git/history',
+  review:        '/api/review/pending',
+  compliance:    '/api/compliance/reports',
+  git:           '/api/git/history',
+  threats:       '/api/threats/feed',
+  'model-audit': null,
 };
 
 const TAB_META = {
@@ -159,9 +186,11 @@ const TAB_META = {
   monitor:    { label: 'Monitor',     icon: '📡' },
   latency:    { label: 'Latency',     icon: '⚡' },
   costs:      { label: 'Costs',       icon: '💰' },
-  review:     { label: 'Review',      icon: '✅' },
-  compliance: { label: 'Compliance',  icon: '📋' },
-  git:        { label: 'Git',         icon: '🔀' },
+  review:        { label: 'Review',      icon: '✅' },
+  compliance:    { label: 'Compliance',  icon: '📋' },
+  git:           { label: 'Git',         icon: '🔀' },
+  threats:       { label: 'Threat Feed', icon: '🛡' },
+  'model-audit': { label: 'Model Audit', icon: '🔬' },
 };
 
 const EMPTY_STATES = {
@@ -173,7 +202,9 @@ const EMPTY_STATES = {
   costs:      { icon: '💰', title: 'No cost data yet',           desc: 'Initialize pyntrace to start tracking LLM API costs in real time.',     cmd: 'import pyntrace; pyntrace.init()',             est: null    },
   review:     { icon: '✅', title: 'Review queue is empty',      desc: 'All annotations are up to date. Nothing needs attention right now.',    cmd: null,                                           est: null    },
   compliance: { icon: '📋', title: 'No compliance reports',      desc: 'Generate a compliance report for your security framework.',            cmd: 'pyntrace compliance --framework owasp_llm_top10', est: null },
-  git:        { icon: '🔀', title: 'No regression history',      desc: 'Run scans across multiple git commits to detect regressions.',          cmd: null,                                           est: null    },
+  git:           { icon: '🔀', title: 'No regression history',      desc: 'Run scans across multiple git commits to detect regressions.',          cmd: null,                                           est: null    },
+  threats:       { icon: '🛡', title: 'Threat feed unavailable',   desc: 'Could not load the OWASP LLM threat catalog.',                           cmd: null,                                           est: null    },
+  'model-audit': { icon: '🔬', title: 'Scan a model file',          desc: 'Enter a path to a .pkl, .pt, .h5, .onnx, or .safetensors file.',        cmd: null,                                           est: null    },
 };
 
 /* ════════════════════════════════════════════════════
@@ -558,11 +589,22 @@ async function showTab(el, name) {
   c.innerHTML = skeleton();
 
   try {
-    const res = await fetch(ENDPOINTS[name]);
+    const endpoint = ENDPOINTS[name];
+    if (!endpoint) {
+      _allData[name] = null;
+      renderTab(name, null);
+      return;
+    }
+    const res = await fetch(endpoint);
     if (!res.ok) throw new Error('HTTP ' + res.status + ' — ' + res.statusText);
     const data = await res.json();
     _allData[name] = data;
     renderTab(name, data);
+    // Persist the tab count for cross-reload awareness
+    const _cntEl = document.getElementById('cnt-' + name);
+    if (_cntEl && _cntEl.textContent) {
+      try { sessionStorage.setItem('pyntrace_cnt_' + name, _cntEl.textContent); } catch(_) {}
+    }
   } catch(err) {
     c.innerHTML = '<div class="empty-state" style="color:var(--c-t2)">'
       + '<div class="empty-icon">⚠</div>'
@@ -588,7 +630,8 @@ function renderTab(name, data) {
 
     const avgVuln   = rows.reduce(function(s,r){ return s+(r.vulnerability_rate||0); },0)/rows.length;
     const totalCost = rows.reduce(function(s,r){ return s+(r.total_cost_usd||0); },0);
-    const critical  = rows.filter(function(r){ return (r.vulnerability_rate||0)>.15; }).length;
+    const _vulnThreshold = (parseInt(localStorage.getItem('pyntrace_vuln_threshold') || '15', 10)) / 100;
+    const critical  = rows.filter(function(r){ return (r.vulnerability_rate||0)>_vulnThreshold; }).length;
     const score     = Math.round((1 - avgVuln) * 100);
     const grade     = score >= 85 ? 'excellent' : score >= 65 ? 'good' : score >= 40 ? 'fair' : 'poor';
     const gradeLabel= score >= 85 ? 'Excellent' : score >= 65 ? 'Good' : score >= 40 ? 'Fair' : 'At Risk';
@@ -964,6 +1007,14 @@ function renderTab(name, data) {
       + buildTable(rows,
           ['git_commit','scans','avg_vuln_rate','total_cost'],
           ['Commit','Scans','Avg Vuln Rate','Total Cost'])
+      + '</div>'
+      + '<div class="card" id="gitDiffCard"><div class="card-title">Commit Diff</div>'
+      + '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">'
+      + '<div><label style="font-size:11px;color:var(--c-t2);display:block;margin-bottom:4px">Base ref</label><input id="gitDiffBase" class="table-search" style="width:140px" placeholder="HEAD~1" value="HEAD~1"></div>'
+      + '<div><label style="font-size:11px;color:var(--c-t2);display:block;margin-bottom:4px">Head ref</label><input id="gitDiffHead" class="table-search" style="width:140px" placeholder="HEAD" value="HEAD"></div>'
+      + '<button class="btn-accent btn-sm" onclick="runGitDiff()">Compare</button>'
+      + '</div>'
+      + '<div id="gitDiffResult" style="color:var(--c-t2);font-size:12px">Enter two refs and click Compare.</div>'
       + '</div>';
 
     const gitLabels = rows.slice().reverse().map(function(r){ return (r.git_commit||'?').slice(0,7); });
@@ -973,6 +1024,20 @@ function renderTab(name, data) {
       tooltipFmt: function(v){ return v + '% avg vuln rate'; },
       extra: { scales: { y: { ticks: { callback: function(v){ return v+'%'; }, color:'#64748b' }, grid: { color:'rgba(37,37,74,.6)' } }, x: { grid: { color:'rgba(37,37,74,.6)' }, ticks: { color:'#64748b' } } } }
     });
+
+  /* ── THREATS ── */
+  } else if (name === 'threats') {
+    const items = Array.isArray(data) ? data : [];
+    const cnt = document.getElementById('cnt-threats');
+    if (cnt) cnt.textContent = items.length;
+    if (!items.length) { c.innerHTML = emptyState(name); return; }
+    renderThreats(items);
+
+  /* ── MODEL AUDIT ── */
+  } else if (name === 'model-audit') {
+    const cnt = document.getElementById('cnt-model-audit');
+    if (cnt) cnt.textContent = '';
+    renderModelAudit();
 
   /* ── FALLBACK ── */
   } else {
@@ -1025,6 +1090,374 @@ function traceClick(i) {
 }
 
 /* ════════════════════════════════════════════════════
+   GIT DIFF
+════════════════════════════════════════════════════ */
+function runGitDiff() {
+  var base = (document.getElementById('gitDiffBase').value || 'HEAD~1').trim();
+  var head = (document.getElementById('gitDiffHead').value || 'HEAD').trim();
+  var el = document.getElementById('gitDiffResult');
+  if (!el) return;
+  el.textContent = 'Loading…';
+  fetch('/api/git/diff?base=' + encodeURIComponent(base) + '&head=' + encodeURIComponent(head))
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      if (d.error) { el.textContent = 'Error: ' + d.error; return; }
+      var status = d.has_regression
+        ? '<span style="color:var(--c-danger)">REGRESSION ▲</span>'
+        : '<span style="color:var(--c-ok)">OK ✓</span>';
+      var html = '<div style="margin-bottom:10px;font-size:13px">'
+        + '<strong>' + esc(base) + '</strong> → <strong>' + esc(head) + '</strong>: '
+        + (d.delta >= 0 ? '+' : '') + (d.delta * 100).toFixed(1) + '% vuln rate ' + status
+        + '</div>';
+      if (d.plugin_deltas && d.plugin_deltas.length) {
+        html += '<table style="width:100%;border-collapse:collapse;font-size:12px">'
+          + '<thead><tr style="color:var(--c-t2)">'
+          + '<th style="text-align:left;padding:4px 8px">Plugin</th>'
+          + '<th style="text-align:right;padding:4px 8px">Delta</th>'
+          + '</tr></thead><tbody>';
+        d.plugin_deltas.forEach(function(row) {
+          var color = row.delta > 0 ? 'var(--c-danger)' : row.delta < 0 ? 'var(--c-ok)' : 'var(--c-t2)';
+          html += '<tr><td style="padding:4px 8px">' + esc(row.plugin) + '</td>'
+            + '<td style="text-align:right;padding:4px 8px;color:' + color + '">'
+            + (row.delta >= 0 ? '+' : '') + (row.delta * 100).toFixed(1) + '%</td></tr>';
+        });
+        html += '</tbody></table>';
+      } else {
+        html += '<div style="color:var(--c-t2);font-size:12px">No per-plugin data for these refs.</div>';
+      }
+      el.innerHTML = html;
+    })
+    .catch(function(){ el.textContent = 'Request failed.'; });
+}
+
+/* ════════════════════════════════════════════════════
+   THREAT FEED
+════════════════════════════════════════════════════ */
+function renderThreats(items) {
+  const c = document.getElementById('mainContent');
+  const sevOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+  const sevClass  = { CRITICAL: 'badge-critical', HIGH: 'badge-high', MEDIUM: 'badge-medium', LOW: 'badge-low', INFO: 'badge-low' };
+
+  // Collect unique categories
+  const cats = Array.from(new Set(items.map(function(t){ return t.category || 'other'; }))).sort();
+
+  let html = '<h2 class="sr-only">Threat Feed</h2>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center">'
+    + '<span style="font-size:11px;color:var(--c-t3);margin-right:4px">Severity:</span>'
+    + ['All','CRITICAL','HIGH','MEDIUM','LOW'].map(function(s){
+        return '<button class="btn btn-outline btn-sm threat-sev-pill' + (s==='All'?' active':'') + '" data-sev="' + s + '" onclick="filterThreats(this)">' + s + '</button>';
+      }).join('')
+    + '<span style="font-size:11px;color:var(--c-t3);margin-left:12px;margin-right:4px">Category:</span>'
+    + '<select id="threatCatFilter" onchange="filterThreats()" style="background:var(--c-surface);color:var(--c-t1);border:1px solid var(--c-border);border-radius:var(--r);padding:3px 8px;font-size:12px">'
+    + '<option value="">All</option>'
+    + cats.map(function(cat){ return '<option value="' + esc(cat) + '">' + esc(cat) + '</option>'; }).join('')
+    + '</select>'
+    + '</div>'
+    + '<div id="threatGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px">';
+
+  items.slice().sort(function(a,b){
+    return (sevOrder[a.severity]||9) - (sevOrder[b.severity]||9);
+  }).forEach(function(t) {
+    const sev = (t.severity || 'INFO').toUpperCase();
+    const bc  = sevClass[sev] || 'badge-low';
+    html += '<div class="card threat-card" data-sev="' + esc(sev) + '" data-cat="' + esc(t.category||'') + '" style="padding:14px">'
+      + '<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">'
+      + '<span class="badge ' + bc + '">' + esc(sev) + '</span>'
+      + '<span style="font-size:10px;font-weight:600;color:var(--c-accent);font-family:var(--font-mono)">' + esc(t.id||'') + '</span>'
+      + (t.category ? '<span style="font-size:10px;color:var(--c-t3);margin-left:auto">' + esc(t.category) + '</span>' : '')
+      + '</div>'
+      + '<div style="font-size:13px;font-weight:600;color:var(--c-t1);margin-bottom:6px">' + esc(t.name||t.title||'') + '</div>'
+      + '<div style="font-size:11px;color:var(--c-t2);line-height:1.5;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden">' + esc(t.description||'') + '</div>'
+      + '<button class="btn btn-outline btn-sm" style="margin-top:10px;width:100%" onclick="testThreat(\'' + esc(t.id||'') + '\')">▶ Test this attack</button>'
+      + '</div>';
+  });
+  html += '</div>';
+  c.innerHTML = html;
+}
+
+function filterThreats(pillEl) {
+  // Update active pill if a pill was clicked
+  if (pillEl && pillEl.dataset.sev) {
+    document.querySelectorAll('.threat-sev-pill').forEach(function(p){ p.classList.remove('active'); });
+    pillEl.classList.add('active');
+  }
+  const activePill = document.querySelector('.threat-sev-pill.active');
+  const sev = activePill ? activePill.dataset.sev : 'All';
+  const catEl = document.getElementById('threatCatFilter');
+  const cat = catEl ? catEl.value : '';
+  document.querySelectorAll('.threat-card').forEach(function(card) {
+    const matchSev = sev === 'All' || card.dataset.sev === sev;
+    const matchCat = !cat || card.dataset.cat === cat;
+    card.style.display = (matchSev && matchCat) ? '' : 'none';
+  });
+}
+
+function testThreat(threatId) {
+  if (!threatId) return;
+  fetch('/api/threats/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ threat_id: threatId, target: '' })
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ toast('Attack "' + threatId + '" queued — status: ' + (d.status || 'ok'), 'info'); })
+    .catch(function(){ toast('Failed to queue attack', 'error'); });
+}
+
+/* ════════════════════════════════════════════════════
+   MODEL AUDIT
+════════════════════════════════════════════════════ */
+var _auditHistory = [];
+
+function renderModelAudit() {
+  const c = document.getElementById('mainContent');
+  // Load history from localStorage
+  try { _auditHistory = JSON.parse(localStorage.getItem('pyntrace_audit_history') || '[]'); } catch(_) { _auditHistory = []; }
+
+  c.innerHTML = '<h2 class="sr-only">Model Audit</h2>'
+    + '<div class="card" style="margin-bottom:16px">'
+    + '<div class="card-title">Scan a Model File</div>'
+    + '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">'
+    + '<input id="auditPathInput" type="text" placeholder="Path to model file or directory…" '
+    + 'style="flex:1;min-width:200px;background:var(--c-bg);color:var(--c-t1);border:1px solid var(--c-border);border-radius:var(--r);padding:8px 12px;font-size:13px" '
+    + 'onkeydown="if(event.key===\'Enter\')runAudit()" />'
+    + '<button class="btn btn-accent" onclick="runAudit()">🔬 Scan</button>'
+    + '</div>'
+    + '<div id="auditStatus" style="margin-top:8px;font-size:12px;color:var(--c-t3)"></div>'
+    + '</div>'
+    + '<div id="auditResult"></div>'
+    + _renderAuditHistory();
+}
+
+function _renderAuditHistory() {
+  if (!_auditHistory.length) return '';
+  return '<div class="card"><div class="card-title">Recent Scans</div>'
+    + '<div style="display:flex;flex-direction:column;gap:6px">'
+    + _auditHistory.slice(0,5).map(function(h, i) {
+        const safe = h.path.replace(/'/g,"&#39;");
+        return '<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--c-border)">'
+          + '<span class="badge ' + (h.safe ? 'badge-low' : 'badge-critical') + '">' + (h.safe ? '✓ Safe' : '⚠ Unsafe') + '</span>'
+          + '<span class="mono" style="font-size:11px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(h.path) + '</span>'
+          + '<span style="font-size:10px;color:var(--c-t3)">' + esc(h.format||'') + '</span>'
+          + '<button class="btn btn-outline btn-sm" onclick="rerunAudit(\'' + safe + '\')">↺ Re-run</button>'
+          + '</div>';
+      }).join('')
+    + '</div></div>';
+}
+
+function rerunAudit(path) {
+  const inp = document.getElementById('auditPathInput');
+  if (inp) inp.value = path;
+  runAudit();
+}
+
+function runAudit() {
+  const inp = document.getElementById('auditPathInput');
+  if (!inp) return;
+  const path = inp.value.trim();
+  if (!path) { toast('Enter a file or directory path', 'warning'); return; }
+
+  const statusEl = document.getElementById('auditStatus');
+  const resultEl = document.getElementById('auditResult');
+  if (statusEl) statusEl.textContent = '⏳ Scanning…';
+  if (resultEl) resultEl.innerHTML = '';
+
+  fetch('/api/audit-model', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: path })
+  }).then(function(r) {
+    if (!r.ok) return r.json().then(function(e){ throw new Error(e.error || ('HTTP ' + r.status)); });
+    return r.json();
+  }).then(function(data) {
+    if (statusEl) statusEl.textContent = '';
+    if (Array.isArray(data)) {
+      // Directory scan — list of reports
+      let html = '<div class="card"><div class="card-title">Directory Scan — ' + data.length + ' file(s)</div>';
+      data.forEach(function(report) { html += renderModelAuditResult(report); });
+      html += '</div>';
+      if (resultEl) resultEl.innerHTML = html;
+      // Save first in history
+      if (data.length) _saveAuditHistory({ path: path, safe: data.every(function(r){ return r.safe; }), format: 'directory' });
+    } else {
+      if (resultEl) resultEl.innerHTML = '<div class="card">' + renderModelAuditResult(data) + '</div>';
+      _saveAuditHistory({ path: path, safe: data.safe, format: data.format || '?' });
+    }
+    const cnt = document.getElementById('cnt-model-audit');
+    if (cnt && _auditHistory.length) cnt.textContent = _auditHistory.length;
+  }).catch(function(err) {
+    if (statusEl) statusEl.textContent = '';
+    toast(err.message || 'Scan failed', 'error');
+    if (resultEl) resultEl.innerHTML = '<div class="empty-state" style="padding:24px"><div class="empty-icon">⚠</div>'
+      + '<div class="empty-title">Scan failed</div><div class="empty-desc">' + esc(err.message) + '</div></div>';
+  });
+}
+
+function renderModelAuditResult(report) {
+  const sevOrder = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 };
+  const sevClass  = { CRITICAL: 'badge-critical', HIGH: 'badge-high', MEDIUM: 'badge-medium', LOW: 'badge-low', INFO: 'badge-low' };
+  const findings  = Array.isArray(report.findings) ? report.findings : [];
+  const safe      = report.safe !== false;
+
+  findings.sort(function(a,b){ return (sevOrder[a.severity]||9) - (sevOrder[b.severity]||9); });
+
+  let html = '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">'
+    + '<span class="badge ' + (safe ? 'badge-low' : 'badge-critical') + '" style="font-size:12px">' + (safe ? '✓ Safe' : '⚠ Unsafe') + '</span>'
+    + (report.format ? '<span style="font-size:11px;color:var(--c-t2);background:var(--c-surface);padding:2px 8px;border-radius:var(--r)">' + esc(report.format) + '</span>' : '')
+    + (report.sha256 ? '<span class="mono" style="font-size:10px;color:var(--c-t3)" title="SHA-256">' + esc(String(report.sha256).slice(0,12)) + '…</span>' : '')
+    + (report.file_size_bytes ? '<span style="font-size:10px;color:var(--c-t3)">' + (report.file_size_bytes/1024).toFixed(1) + ' KB</span>' : '')
+    + '</div>';
+
+  if (!findings.length) {
+    html += '<div style="color:var(--c-success);font-size:13px;padding:8px 0">✓ No findings — model appears clean</div>';
+  } else {
+    html += '<div class="table-wrap"><table class="vuln-table"><thead><tr>'
+      + '<th>Severity</th><th>Rule</th><th>Title</th><th>Evidence</th>'
+      + '</tr></thead><tbody>';
+    findings.forEach(function(f) {
+      const sev = (f.severity || 'INFO').toUpperCase();
+      html += '<tr>'
+        + '<td><span class="badge ' + (sevClass[sev]||'badge-low') + '">' + esc(sev) + '</span></td>'
+        + '<td class="mono" style="font-size:10px">' + esc(f.rule || f.check || '') + '</td>'
+        + '<td>' + esc(f.title || f.message || f.description || '') + '</td>'
+        + '<td style="font-size:10px;color:var(--c-t2)">' + esc(String(f.evidence||f.detail||'').slice(0,80)) + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  return html;
+}
+
+function _saveAuditHistory(entry) {
+  _auditHistory = [entry].concat(_auditHistory.filter(function(h){ return h.path !== entry.path; })).slice(0,10);
+  try { localStorage.setItem('pyntrace_audit_history', JSON.stringify(_auditHistory)); } catch(_) {}
+  // Re-render history section if present
+  const hContainer = document.querySelector('#mainContent .card:last-child');
+  // Refresh whole panel to update history list
+  const c = document.getElementById('mainContent');
+  const existing = document.querySelector('#auditPathInput');
+  if (existing) {
+    const hEl = document.getElementById('auditResult');
+    if (hEl) {
+      // Remove old history card if present
+      const oldHistory = hEl.nextElementSibling;
+      if (oldHistory) oldHistory.remove();
+      hEl.insertAdjacentHTML('afterend', _renderAuditHistory());
+    }
+  }
+}
+
+/* ════════════════════════════════════════════════════
+   SETTINGS DRAWER
+════════════════════════════════════════════════════ */
+function openSettings() {
+  const panel   = document.getElementById('settingsPanel');
+  const overlay = document.getElementById('settingsOverlay');
+  if (!panel) return;
+  panel.style.display   = '';
+  overlay.style.display = '';
+  // Use RAF so CSS transition fires
+  requestAnimationFrame(function() { panel.classList.add('open'); overlay.classList.add('open'); });
+  loadSettingsContent();
+}
+
+function closeSettings() {
+  const panel   = document.getElementById('settingsPanel');
+  const overlay = document.getElementById('settingsOverlay');
+  if (!panel) return;
+  panel.classList.remove('open');
+  overlay.classList.remove('open');
+  setTimeout(function() {
+    panel.style.display   = 'none';
+    overlay.style.display = 'none';
+  }, 280);
+}
+
+function loadSettingsContent() {
+  const body = document.getElementById('settingsBody');
+  if (!body) return;
+  body.innerHTML = '<div style="color:var(--c-t3);font-size:12px;padding:8px 0">Loading…</div>';
+
+  Promise.all([
+    fetch('/api/plugins').then(function(r){ return r.json(); }).catch(function(){ return []; }),
+    fetch('/health').then(function(r){ return r.json(); }).catch(function(){ return {}; })
+  ]).then(function(results) {
+    const plugins = results[0];
+    const health  = results[1];
+
+    // ── Plugin Registry ──
+    let html = '<div class="detail-section">'
+      + '<div class="detail-section-title" style="display:flex;align-items:center;gap:8px">Plugin Registry'
+      + '<span style="font-size:10px;background:var(--c-surface);padding:1px 7px;border-radius:var(--r);color:var(--c-t3)">' + plugins.length + '</span>'
+      + '</div>'
+      + '<div class="table-wrap" style="max-height:220px;overflow-y:auto"><table><thead><tr>'
+      + '<th>Name</th><th>Category</th><th>Type</th></tr></thead><tbody>';
+    if (!plugins.length) {
+      html += '<tr><td colspan="3" style="color:var(--c-t3);text-align:center;padding:16px">No plugins found</td></tr>';
+    } else {
+      plugins.forEach(function(p) {
+        html += '<tr><td class="mono" style="font-size:11px">' + esc(p.name) + '</td>'
+          + '<td style="font-size:11px">' + esc(p.category||'') + '</td>'
+          + '<td>' + (p.builtin
+              ? '<span class="badge badge-low" style="font-size:10px">Built-in</span>'
+              : '<span class="badge badge-medium" style="font-size:10px">Custom</span>') + '</td></tr>';
+      });
+    }
+    html += '</tbody></table></div></div>';
+
+    // ── Scan Preferences ──
+    const currentThreshold = localStorage.getItem('pyntrace_vuln_threshold') || '15';
+    html += '<div class="detail-section">'
+      + '<div class="detail-section-title">Scan Preferences</div>'
+      + '<div class="detail-kv">'
+      + '<span class="detail-k">Critical Threshold (%)</span>'
+      + '<span class="detail-v" style="display:flex;align-items:center;gap:8px">'
+      + '<input id="vulnThresholdInput" type="number" min="1" max="100" value="' + esc(currentThreshold) + '" '
+      + 'style="width:64px;background:var(--c-bg);color:var(--c-t1);border:1px solid var(--c-border);border-radius:var(--r);padding:3px 6px;font-size:12px" />'
+      + '<button class="btn btn-outline btn-sm" onclick="(function(){var v=document.getElementById(\'vulnThresholdInput\').value;if(v&&+v>0&&+v<=100){localStorage.setItem(\'pyntrace_vuln_threshold\',v);toast(\'Threshold saved: \'+v+\'%\',\'success\');}else{toast(\'Enter 1-100\',\'warning\');}})()">Save</button>'
+      + '</span>'
+      + '</div></div>';
+
+    // ── API Info ──
+    const dbOk = health.db === 'ok';
+    html += '<div class="detail-section">'
+      + '<div class="detail-section-title">API Info</div>'
+      + '<div class="detail-kv">'
+      + '<span class="detail-k">Version</span><span class="detail-v mono">' + esc(health.version || '—') + '</span>'
+      + '<span class="detail-k">DB Status</span><span class="detail-v">'
+      + (dbOk ? '<span class="badge badge-low">✓ ok</span>' : '<span class="badge badge-critical">✗ error</span>')
+      + '</span>'
+      + '<span class="detail-k">Server</span><span class="detail-v mono" style="font-size:11px">' + esc(location.host) + '</span>'
+      + '</div></div>';
+
+    // ── Provider Reference ──
+    const providers = [
+      ['OpenAI',       'gpt-*',       'OPENAI_API_KEY'],
+      ['Anthropic',    'claude-*',    'ANTHROPIC_API_KEY'],
+      ['Google',       'gemini-*',    'GOOGLE_API_KEY'],
+      ['Azure OpenAI', 'azure:',      'AZURE_OPENAI_ENDPOINT + KEY'],
+      ['AWS Bedrock',  'bedrock:',    'AWS credentials'],
+      ['Groq',         'groq:',       'GROQ_API_KEY'],
+      ['Mistral',      'mistral:',    'MISTRAL_API_KEY'],
+      ['Cohere',       'cohere:',     'COHERE_API_KEY'],
+      ['Together AI',  'together:',   'TOGETHER_API_KEY'],
+      ['Ollama',       'ollama:',     '(none — local)'],
+    ];
+    html += '<div class="detail-section">'
+      + '<div class="detail-section-title">Provider Reference</div>'
+      + '<div class="table-wrap" style="max-height:220px;overflow-y:auto"><table><thead><tr>'
+      + '<th>Provider</th><th>Prefix</th><th>Env Var</th></tr></thead><tbody>';
+    providers.forEach(function(p) {
+      html += '<tr><td style="font-size:11px">' + esc(p[0]) + '</td>'
+        + '<td class="mono" style="font-size:10px;color:var(--c-accent)">' + esc(p[1]) + '</td>'
+        + '<td class="mono" style="font-size:10px;color:var(--c-t3)">' + esc(p[2]) + '</td></tr>';
+    });
+    html += '</tbody></table></div></div>';
+
+    body.innerHTML = html;
+  });
+}
+
+/* ════════════════════════════════════════════════════
    GLOBAL SEARCH (Cmd+K)
 ════════════════════════════════════════════════════ */
 document.addEventListener('keydown', function(e) {
@@ -1035,6 +1468,7 @@ document.addEventListener('keydown', function(e) {
   if (e.key === 'Escape') {
     closeSearch();
     closeDetail();
+    closeSettings();
   }
 });
 
@@ -1125,9 +1559,68 @@ fetch('/api/security/reports?limit=1').then(function(r){ return r.headers.get('x
   .catch(function(){});
 
 /* ════════════════════════════════════════════════════
+   THEME TOGGLE
+════════════════════════════════════════════════════ */
+function toggleTheme() {
+  const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+  const next = isLight ? 'dark' : 'light';
+  document.documentElement.setAttribute('data-theme', next === 'dark' ? '' : 'light');
+  localStorage.setItem('pyntrace_theme', next);
+  const btn = document.getElementById('themeToggleBtn');
+  if (btn) btn.textContent = next === 'light' ? '🌙' : '☀';
+}
+
+/* ════════════════════════════════════════════════════
+   KEYBOARD SHORTCUTS LEGEND
+════════════════════════════════════════════════════ */
+document.addEventListener('keydown', function(e) {
+  if (e.key === '?' && !e.target.closest('input, textarea, select')) {
+    e.preventDefault();
+    openShortcutsModal();
+  }
+});
+
+function openShortcutsModal() {
+  const bd = document.getElementById('searchBackdrop');
+  const res = document.getElementById('searchModalResults');
+  const inp = document.getElementById('searchModalInput');
+  if (bd) bd.classList.add('open');
+  if (inp) inp.value = '';
+  if (res) res.innerHTML = [
+    ['⌘K / Ctrl+K', 'Open global search'],
+    ['?', 'Show this shortcut legend'],
+    ['Escape', 'Close modal / panel'],
+    ['← →', 'Navigate sidebar tabs'],
+    ['⬇ Export', 'Export current view as PDF'],
+    ['⚙ Settings', 'Open Settings drawer (plugin registry, provider reference)'],
+  ].map(function(pair) {
+    return '<div class="search-result" style="cursor:default">'
+      + '<span class="mono" style="font-size:11px;min-width:120px;color:var(--c-accent)">' + esc(pair[0]) + '</span>'
+      + '<span class="search-result-label" style="color:var(--c-t2)">' + esc(pair[1]) + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════════
    INIT
 ════════════════════════════════════════════════════ */
 (function() {
+  // Restore theme preference
+  var savedTheme = localStorage.getItem('pyntrace_theme');
+  if (savedTheme === 'light') {
+    document.documentElement.setAttribute('data-theme', 'light');
+    var tb = document.getElementById('themeToggleBtn');
+    if (tb) tb.textContent = '🌙';
+  }
+
+  // Restore tab counts from sessionStorage before first fetch
+  Object.keys(TAB_META).forEach(function(tab) {
+    const stored = sessionStorage.getItem('pyntrace_cnt_' + tab);
+    if (stored) {
+      const el = document.getElementById('cnt-' + tab);
+      if (el) el.textContent = stored;
+    }
+  });
   const el = document.querySelector('.sidebar-tab[data-tab="security"]');
   _tabEl = el;
   showTab(el, 'security');

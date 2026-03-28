@@ -53,6 +53,7 @@ volumes:
 | `PYNTRACE_API_KEY` | — | Enable token-based API authentication |
 | `PYNTRACE_HOST` | `127.0.0.1` | Bind address (`0.0.0.0` for Docker) |
 | `PYNTRACE_HTPASSWD_FILE` | — | Path to htpasswd file for HTTP Basic Auth |
+| `PYNTRACE_STRICT_SECRETS` | — | Set to `1` to raise `RuntimeError` instead of warning when plaintext secret storage is attempted (requires `PYNTRACE_SECRETS_KEY` to be configured) |
 | `OPENAI_API_KEY` | — | For scanning from the dashboard |
 | `ANTHROPIC_API_KEY` | — | For Anthropic models |
 | `AZURE_OPENAI_ENDPOINT` | — | For Azure OpenAI |

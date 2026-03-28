@@ -5,6 +5,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — Sprint 7+8: Enterprise Hardening
+
+### Security Fixes
+
+- **db.py** — SQLCipher PRAGMA key injection: single-quote characters in `PYNTRACE_DB_KEY` are now escaped (`''`) before use in `PRAGMA key=`; null bytes raise `ValueError` immediately
+- **server/app.py** — CSP hardened with `frame-ancestors 'none'`; `_FALLBACK_HTML` replaced with compact ~30-line placeholder (was 820 lines)
+- **providers.py** — Offline mode now emits `UserWarning` when a non-Ollama model is silently rerouted to local Ollama
+- **secrets/store.py** — New `PYNTRACE_STRICT_SECRETS` env var: raises `RuntimeError` instead of warning when plaintext secret storage is attempted without `PYNTRACE_SECRETS_KEY` or when `cryptography` is absent
+- **guard/mcp_scanner.py** — All `urlopen` calls now use `ssl.create_default_context()` by default; `insecure: bool = False` parameter added to `scan_mcp()` and `_send_jsonrpc()`; `--insecure` CLI flag for `scan-mcp`
+- **cli.py** — `eval run` auto-detects CI environments (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, `CI_SERVER`, `CIRCLECI`, `TRAVIS`, `TF_BUILD`) and skips interactive prompt
+
+### Code Quality
+
+- **guard/attacks.py** — Removed dead code in `register_plugin` (first `PLUGIN_REGISTRY[name]` assignment was immediately overwritten); `load_file_plugins` now emits `UserWarning` before executing each plugin file (arbitrary code execution disclosure)
+- **guard/red_team.py** — Added `seed: int | None = None` parameter to `red_team()` for reproducible attack sampling; calls `random.seed(seed)` before sampling
+
+### Features
+
+- **pricing.py** — `check_budget(max_cost_usd, period, db_path)`: queries accumulated spend vs threshold; emits `UserWarning` at ≥80%; returns `{total_usd, threshold_usd, pct, over_budget}`
+- **cli.py** — `pyntrace monitor budget --alert-at USD [--period day|week|month]`: checks spend vs threshold, exits 1 when over budget
+- **server/app.py** — `GET /api/costs/budget?threshold=USD&period=day`: returns budget check JSON
+- **git_tracker.py + server/app.py + index.html** — Git Diff panel in dashboard: `GET /api/git/diff?base=REF&head=REF` returns per-plugin delta table; UI shows inline Commit Diff card with Compare button
+- **guard/red_team.py** — `red_team(..., remediate=True)`: calls a second LLM pass after each vulnerable finding to generate a targeted code fix suggestion; `AttackResult.remediation` field populated
+- **cli.py** — `pyntrace scan --remediate`: enables AI remediation suggestions
+
+### UX
+
+- **index.html** — Vulnerability threshold configurable via `localStorage` (`pyntrace_vuln_threshold`, default 15) with Settings drawer input
+- **index.html** — Tab counts persisted across page reloads via `sessionStorage`
+- **index.html** — `?` keyboard shortcut opens shortcut legend modal
+- **index.html** — Dark/light mode toggle button in header; preference stored in `localStorage`
+- **index.html** — Red team detail panel expanded to show full attack prompt, model response, and judge reasoning
+- **index.html** — Latency and Costs collapsed into sub-sections to reduce navigation overwhelm
+- **index.html** — Chart.js CDN pinned to `@4.4.7` with SRI `integrity` attribute
+
+### Tests
+
+- **tests/test_security_hardening.py** — 33 new tests covering all Sprint 7+8 changes: SQLCipher escaping, strict secrets, CI detection (7 env vars), offline mode warnings, security headers, CSP, fallback HTML size, plugin load warning, RNG seed reproducibility, MCP TLS, budget alerts, git diff delta, and AI remediation
+
+### Docs
+
+- **docs/docker.md** — Added `PYNTRACE_STRICT_SECRETS` to environment variables table
+- **docs/mcp-security.md** — Documented `--insecure` CLI flag and `insecure` Python API parameter
+
+---
+
 ## [0.6.0] — 2026-03-20
 
 ### Added

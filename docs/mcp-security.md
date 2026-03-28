@@ -49,6 +49,7 @@ report = pyntrace.scan_mcp(
     auth_token="your-token",    # Bearer auth if server requires it
     timeout=10,                 # HTTP timeout in seconds
     n_fuzzes=5,                 # schema fuzzing iterations
+    insecure=False,             # set True to skip TLS cert verification (dev only)
 )
 
 report.summary()              # colored terminal output
@@ -71,7 +72,14 @@ pyntrace scan-mcp http://localhost:3000 --auth-token $MCP_TOKEN
 
 # CI integration — SARIF + JUnit
 pyntrace scan-mcp http://localhost:3000 --output-sarif mcp.sarif --output-junit mcp.xml
+
+# Skip TLS certificate verification (trusted internal servers only)
+pyntrace scan-mcp https://internal.corp:3000 --insecure
 ```
+
+> **Security note:** `--insecure` disables TLS certificate verification (`CERT_NONE`).
+> Use only against internal development servers with self-signed certificates.
+> Never use against production endpoints.
 
 ## GitHub Actions integration
 

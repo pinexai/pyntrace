@@ -130,6 +130,14 @@ def call(
 def _call_raw(model: str, messages: list[dict], system: str) -> tuple[str, int, int]:
     """Inner dispatch — no retry logic here."""
     if _OFFLINE and not model.startswith("ollama:"):
+        import warnings
+        warnings.warn(
+            f"[pyntrace] offline=True: model '{model}' is being rerouted to "
+            f"local Ollama ({_LOCAL_JUDGE_MODEL}). Pass model='ollama:{model}' "
+            "or set offline=False to suppress this warning.",
+            UserWarning,
+            stacklevel=3,
+        )
         return _call_ollama(model, messages, system)
 
     # Explicit prefix routing

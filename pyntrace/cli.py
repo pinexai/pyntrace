@@ -46,6 +46,8 @@ def cmd_scan(args) -> None:
         git_compare=args.git_compare,
         fail_on_regression=args.fail_on_regression,
         max_cost_usd=args.max_cost,
+        seed=getattr(args, "seed", None),
+        remediate=getattr(args, "remediate", False),
     )
     report.summary()
 
@@ -308,6 +310,7 @@ def cmd_scan_mcp(args) -> None:
         tests=tests,
         auth_token=args.auth_token,
         timeout=args.timeout,
+        insecure=getattr(args, "insecure", False),
     )
     report.summary()
 
@@ -349,7 +352,9 @@ def cmd_eval_run(args) -> None:
     import os as _os
     import runpy
     path = _os.path.abspath(args.file)
-    if not getattr(args, "yes", False):
+    _CI_VARS = ("CI", "GITHUB_ACTIONS", "GITLAB_CI", "CI_SERVER", "CIRCLECI", "TRAVIS", "TF_BUILD")
+    _is_ci = any(_os.getenv(v) for v in _CI_VARS)
+    if not getattr(args, "yes", False) and not _is_ci:
         print(f"[pyntrace] WARNING: This will execute arbitrary Python code from:")
         print(f"           {path}")
         try:
@@ -359,6 +364,8 @@ def cmd_eval_run(args) -> None:
         if confirm != "y":
             print("[pyntrace] Aborted.")
             sys.exit(0)
+    elif _is_ci and not getattr(args, "yes", False):
+        print(f"[pyntrace] CI environment detected — executing '{path}' without prompt.")
     ns = runpy.run_path(args.file)
     exp = ns.get("experiment") or ns.get("exp")
     if exp is None:
@@ -406,6 +413,23 @@ def cmd_monitor_traces(args) -> None:
     for r in rows:
         ts = datetime.datetime.fromtimestamp(r["start_time"]).strftime("%Y-%m-%d %H:%M:%S") if r["start_time"] else "-"
         print(f"{r['id']:<38} {(r['name'] or '-'):<25} {ts:<20} {r['error'] or '-'}")
+
+
+def cmd_monitor_budget(args) -> None:
+    """pyntrace monitor budget --alert-at USD [--period day|week|month]"""
+    from pyntrace.pricing import check_budget
+    result = check_budget(
+        max_cost_usd=args.alert_at,
+        period=args.period,
+    )
+    status = "OVER BUDGET" if result["over_budget"] else "OK"
+    print(
+        f"\n[pyntrace] Budget check ({args.period}): "
+        f"${result['total_usd']:.4f} / ${result['threshold_usd']:.2f} "
+        f"({result['pct']:.1f}%) — {status}"
+    )
+    if result["over_budget"]:
+        sys.exit(1)
 
 
 def cmd_review_list(args) -> None:
@@ -568,10 +592,14 @@ def main() -> None:
                         help="Save SARIF 2.1.0 report (GitHub Advanced Security)")
     p_scan.add_argument("--output-junit", dest="output_junit", metavar="FILE",
                         help="Save JUnit XML report (CI test reporters)")
+    p_scan.add_argument("--seed", type=int, default=None, metavar="INT",
+                       help="Random seed for reproducible attack sampling")
     p_scan.add_argument("--fast", action="store_true",
                         help="Quick CI mode: n=5, jailbreak+harmful only (<1 min)")
     p_scan.add_argument("--critical-only", action="store_true", dest="critical_only",
                         help="Only high-severity plugins (jailbreak, harmful)")
+    p_scan.add_argument("--remediate", action="store_true",
+                        help="Generate AI-powered remediation suggestions for each vulnerability")
     p_scan.set_defaults(func=cmd_scan)
 
     # fingerprint
@@ -649,6 +677,8 @@ def main() -> None:
     p_mcp.add_argument("--auth-token", dest="auth_token", metavar="TOKEN",
                        help="Bearer token for authenticated MCP servers")
     p_mcp.add_argument("--timeout", type=int, default=10, metavar="SECS")
+    p_mcp.add_argument("--insecure", action="store_true",
+                       help="Disable TLS certificate verification (use only for trusted internal servers)")
     p_mcp.add_argument("--output", metavar="FILE", help="Save JSON report to file")
     p_mcp.add_argument("--output-sarif", dest="output_sarif", metavar="FILE",
                        help="Save SARIF 2.1.0 report (GitHub Advanced Security)")
@@ -694,6 +724,13 @@ def main() -> None:
     p_traces = mon_sub.add_parser("traces")
     p_traces.add_argument("--limit", type=int, default=20)
     p_traces.set_defaults(func=cmd_monitor_traces)
+
+    p_budget = mon_sub.add_parser("budget", help="Check LLM spend against a cost threshold")
+    p_budget.add_argument("--alert-at", type=float, required=True, dest="alert_at",
+                          metavar="USD", help="Budget threshold in USD")
+    p_budget.add_argument("--period", choices=["day", "week", "month"], default="day",
+                          help="Aggregation window (default: day)")
+    p_budget.set_defaults(func=cmd_monitor_budget)
 
     # review
     p_rev = sub.add_parser("review", help="Human review workflow")
