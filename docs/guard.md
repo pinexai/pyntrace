@@ -107,6 +107,50 @@ From the CLI:
 pyntrace scan myapp:chatbot --output-junit results.xml
 ```
 
+## AI-powered remediation suggestions
+
+Pass `remediate=True` to have pyntrace call a second LLM pass for every vulnerability it finds — generating a targeted, actionable code fix:
+
+```python
+report = pyntrace.red_team(
+    my_chatbot,
+    plugins=["jailbreak", "pii", "harmful"],
+    remediate=True,  # generate fix suggestions for each finding
+)
+
+for r in report.results:
+    if r.vulnerable:
+        print(f"\n[{r.plugin}] {r.severity}")
+        print(f"  Attack : {r.attack_input[:80]}")
+        print(f"  Fix    : {r.remediation}")
+```
+
+Each `AttackResult.remediation` is a concise suggestion (1–5 sentences or a short code snippet) covering input validation, output filtering, system-prompt hardening, or guardrail techniques specific to the plugin type.
+
+From the CLI:
+
+```bash
+pyntrace scan myapp:chatbot --remediate
+```
+
+> **Cost note:** remediation adds one extra LLM call per vulnerable finding. Use `--max-cost` to cap total spend.
+
+---
+
+## Reproducible scans
+
+Set `seed` for deterministic attack sampling — useful in CI to ensure the same attacks are tested every run:
+
+```python
+report = pyntrace.red_team(my_chatbot, plugins=["jailbreak"], n_attacks=10, seed=42)
+```
+
+```bash
+pyntrace scan myapp:chatbot --seed 42
+```
+
+---
+
 ## Cost guardrails
 
 Prevent runaway API costs with `max_cost_usd`. The scan aborts cleanly when the ceiling is reached:

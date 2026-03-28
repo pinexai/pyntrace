@@ -9,20 +9,7 @@ pyntrace serve
 pyntrace serve --port 8080 --no-open
 ```
 
-The dashboard is a fully client-side single-page application served from `/`. No JavaScript framework CDN is required — Chart.js is loaded from jsDelivr (already allowed in the default CSP).
-
-## React UI (Phase 3a)
-
-A Vite + React 18 + TypeScript build is also available in `frontend/`. It builds to `pyntrace/server/static/app/` and is served at `/static/app/`.
-
-```bash
-# Install and build
-make install-ui   # npm install in frontend/
-make build-ui     # production build → static/app/
-
-# Development (live reload, proxies /api and /ws to :7234)
-make dev-ui       # http://localhost:5173
-```
+The dashboard is a fully client-side single-page application served from `/`. Chart.js is loaded from jsDelivr with a pinned SRI hash (already allowed in the default CSP).
 
 ## Demo
 
@@ -35,13 +22,21 @@ make dev-ui       # http://localhost:5173
 
 ## Screenshots
 
-### Security tab — health score, vulnerability trend, and attack radar
+### Security tab — dark mode (default)
 
 ![pyntrace dashboard security](images/dashboard-security.png)
 
-### Security tab — scan comparison modal
+### Security tab — light mode
 
-![pyntrace dashboard overview](images/dashboard-overview.png)
+![pyntrace dashboard light mode](images/dashboard-light-mode.png)
+
+### Settings drawer — threshold config
+
+![pyntrace settings drawer](images/dashboard-settings.png)
+
+### Keyboard shortcut legend
+
+![pyntrace shortcut legend](images/dashboard-shortcuts.png)
 
 ### MCP Security Scans tab
 
@@ -71,9 +66,21 @@ make dev-ui       # http://localhost:5173
 
 ![pyntrace dashboard compliance](images/dashboard-compliance.png)
 
-### Git tab — scan regression history across commits
+### Git tab — regression history + Commit Diff panel
 
 ![pyntrace dashboard git](images/dashboard-git.png)
+
+### Git tab — per-plugin commit diff
+
+![pyntrace git diff panel](images/dashboard-git-diff.png)
+
+### Threats tab — OWASP LLM Top 10 feed
+
+![pyntrace threats tab](images/dashboard-threats.png)
+
+### Model Audit tab
+
+![pyntrace model audit tab](images/dashboard-model-audit.png)
 
 ---
 
@@ -89,7 +96,54 @@ make dev-ui       # http://localhost:5173
 | **Costs** | `/api/costs/summary` | Cost per model bar chart, latency scatter, daily spend area |
 | **Review** | `/api/review/pending` | Annotation queue, true/false positive labeling |
 | **Compliance** | `/api/compliance/reports` | OWASP/NIST/EU AI Act status, download reports |
-| **Git** | `/api/git/history` | Regression detection, vuln rate per commit bar chart |
+| **Git** | `/api/git/history` | Regression detection, vuln rate per commit bar chart, Commit Diff panel |
+| **Threats** | `/api/threats/feed` | OWASP LLM Top 10 + pyntrace extras catalog, severity filter, "Test this attack" |
+| **Model Audit** | *(local scan)* | Scan `.pkl`, `.pt`, `.h5`, `.onnx`, `.safetensors` files for malicious payloads |
+
+---
+
+## Keyboard Shortcuts
+
+| Shortcut | Action |
+|---|---|
+| `Cmd+K` / `Ctrl+K` | Open search / command palette |
+| `Escape` | Close modal, search, or detail panel |
+| `↑` / `↓` | Navigate search results |
+| `Enter` | Open selected search result |
+| `?` | Open this shortcut legend |
+
+---
+
+## Sprint 7+8 Features
+
+### Dark / Light Mode
+
+The header includes a ☀/🌙 toggle button. Your preference is stored in `localStorage` (`pyntrace_theme`) and restored on every visit.
+
+### Vulnerability Threshold (Settings Drawer)
+
+Click **⚙ Settings** in the header to open the Settings drawer. The **Vulnerability threshold** field controls the percentage above which the Security tab shows a warning banner. Default is `15%`. Stored in `localStorage` as `pyntrace_vuln_threshold`.
+
+### Tab Count Persistence
+
+After each data fetch, tab badge counts (e.g. "42 scans") are saved to `sessionStorage`. On page reload, counts are restored immediately — no flash of `—` while data loads.
+
+### Git Commit Diff Panel
+
+The Git tab includes a **Commit Diff** card below the regression history table. Enter any two git refs (branches, SHAs, tags) and click **Compare** to see:
+
+- Overall vuln-rate delta between the two commits
+- Per-plugin breakdown table with colour-coded deltas (red = regression, green = improvement)
+- `REGRESSION ▲` / `OK ✓` status
+
+```bash
+# Equivalent CLI command
+pyntrace scan --git-compare main --fail-on-regression module:fn
+```
+
+The API endpoint is `GET /api/git/diff?base=main&head=HEAD`.
+
+---
 
 ## Phase 2 Features
 

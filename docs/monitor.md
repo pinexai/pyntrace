@@ -65,6 +65,53 @@ Webhook payload follows the standard pyntrace alert schema:
 
 ---
 
+## Budget alerts
+
+Track accumulated LLM spend against a threshold and alert when approaching or exceeding it.
+
+### CLI
+
+```bash
+# Check today's spend — warns at ≥80%, exits 1 if over budget
+pyntrace monitor budget --alert-at 5.00
+
+# Weekly budget (exits 1 if over $20 this week)
+pyntrace monitor budget --alert-at 20.00 --period week
+
+# Monthly
+pyntrace monitor budget --alert-at 100.00 --period month
+```
+
+The command prints:
+```
+[pyntrace] Budget check (day): $4.32 / $5.00 (86.4%) — OK
+```
+And exits with code `1` when the budget is exceeded, making it CI-friendly.
+
+### Python API
+
+```python
+from pyntrace.pricing import check_budget
+
+result = check_budget(max_cost_usd=5.00, period="day")
+# {"total_usd": 4.32, "threshold_usd": 5.0, "pct": 86.4, "over_budget": False}
+
+if result["over_budget"]:
+    send_alert(f"LLM budget exceeded: ${result['total_usd']:.2f}")
+```
+
+A `UserWarning` is automatically emitted when spend reaches **80%** of the threshold.
+
+### Dashboard API
+
+```
+GET /api/costs/budget?threshold=5.00&period=day
+```
+
+Returns the same JSON: `{total_usd, threshold_usd, pct, over_budget}`.
+
+---
+
 ## v0.4.0 — PrometheusExporter
 
 Zero-dependency Prometheus text format export from the local SQLite store. No external backend required.
